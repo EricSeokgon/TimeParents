@@ -9,6 +9,47 @@ from datetime import datetime, timedelta
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
+class PasswordDialog(ctk.CTkToplevel):
+    def __init__(self, parent, title="비밀번호 입력", text="비밀번호를 입력하세요:"):
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("300x150")
+        self.resizable(False, False)
+        
+        self.result = None
+        
+        # Center the dialog
+        self.transient(parent)
+        self.grab_set()
+        
+        # Label
+        ctk.CTkLabel(self, text=text).pack(pady=20)
+        
+        # Password entry
+        self.pw_entry = ctk.CTkEntry(self, show="*", width=250)
+        self.pw_entry.pack(pady=10)
+        self.pw_entry.bind("<Return>", lambda e: self.ok_clicked())
+        self.pw_entry.focus()
+        
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=10)
+        
+        ctk.CTkButton(btn_frame, text="확인", command=self.ok_clicked, width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="취소", command=self.cancel_clicked, width=100).pack(side="left", padx=5)
+    
+    def ok_clicked(self):
+        self.result = self.pw_entry.get()
+        self.destroy()
+    
+    def cancel_clicked(self):
+        self.result = None
+        self.destroy()
+    
+    def get_input(self):
+        self.wait_window()
+        return self.result
+
 class GameTimerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -187,7 +228,7 @@ class GameTimerApp(ctk.CTk):
             print(f"Error loading settings: {e}")
 
     def change_password_dialog(self):
-        dialog = ctk.CTkInputDialog(text="현재 비밀번호를 입력하세요:", title="비밀번호 변경")
+        dialog = PasswordDialog(self, title="비밀번호 변경", text="현재 비밀번호를 입력하세요:")
         current_pw = dialog.get_input()
         
         if current_pw and utils.check_password(current_pw):
@@ -295,7 +336,7 @@ class GameTimerApp(ctk.CTk):
             system_control.logoff_system()
 
     def prompt_stop_timer(self):
-        dialog = ctk.CTkInputDialog(text="비밀번호를 입력하세요:", title="비밀번호 확인")
+        dialog = PasswordDialog(self, title="비밀번호 확인", text="비밀번호를 입력하세요:")
         pw = dialog.get_input()
         
         if pw and utils.check_password(pw):
