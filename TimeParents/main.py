@@ -1,0 +1,316 @@
+import customtkinter as ctk
+from tkinter import messagebox
+import utils
+import system_control
+from timer_logic import GameTimer, ProcessTimer
+import sys
+from datetime import datetime, timedelta
+
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
+
+class GameTimerApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+
+        self.title("타임페어런츠(TimeParents)")
+        self.geometry("400x650")
+        self.resizable(False, False)
+
+        self.timer = None
+        self.action_var = ctk.StringVar(value="shutdown")
+
+        self.container = ctk.CTkFrame(self)
+        self.container.pack(fill="both", expand=True, padx=20, pady=20)
+
+        if not utils.is_password_set():
+            self.show_setup_password()
+        else:
+            self.show_login()
+
+    def clear_container(self):
+        for widget in self.container.winfo_children():
+            widget.destroy()
+
+    def show_setup_password(self):
+        self.clear_container()
+        
+        ctk.CTkLabel(self.container, text="비밀번호 설정", font=("Arial", 24, "bold")).pack(pady=20)
+        ctk.CTkLabel(self.container, text="초기 비밀번호를 설정해주세요.").pack(pady=10)
+
+        self.pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호")
+        self.pw_entry.pack(pady=10, fill="x")
+        
+        self.pw_confirm = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호 확인")
+        self.pw_confirm.pack(pady=10, fill="x")
+
+        ctk.CTkButton(self.container, text="설정 완료", command=self.set_password).pack(pady=20, fill="x")
+
+    def set_password(self):
+        pw = self.pw_entry.get()
+        confirm = self.pw_confirm.get()
+
+        if not pw:
+            messagebox.showerror("오류", "비밀번호를 입력해주세요.")
+            return
+        if pw != confirm:
+            messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+            return
+
+        utils.save_password(pw)
+        messagebox.showinfo("성공", "비밀번호가 설정되었습니다.")
+        self.show_dashboard()
+
+    def show_login(self):
+        self.clear_container()
+        
+        ctk.CTkLabel(self.container, text="로그인", font=("Arial", 24, "bold")).pack(pady=40)
+        
+        self.login_pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호 입력")
+        self.login_pw_entry.pack(pady=20, fill="x")
+
+        ctk.CTkButton(self.container, text="로그인", command=self.login).pack(pady=20, fill="x")
+
+    def login(self):
+        pw = self.login_pw_entry.get()
+        if utils.check_password(pw):
+            self.show_dashboard()
+        else:
+            messagebox.showerror("오류", "비밀번호가 올바르지 않습니다.")
+
+    def show_dashboard(self):
+        self.clear_container()
+
+        ctk.CTkLabel(self.container, text="게임 시간 설정", font=("Arial", 24, "bold")).pack(pady=10)
+
+        # Tab View
+        self.tab_view = ctk.CTkTabview(self.container)
+        self.tab_view.pack(pady=10, fill="x")
+        
+        self.tab_game = self.tab_view.add("특정 게임")
+        self.tab_duration = self.tab_view.add("카운트다운")
+        self.tab_schedule = self.tab_view.add("특정 시간")
+        
+        # Tab 1: Duration
+        time_frame = ctk.CTkFrame(self.tab_duration, fg_color="transparent")
+        time_frame.pack(pady=20)
+        
+        self.hour_entry = ctk.CTkEntry(time_frame, width=60, placeholder_text="0")
+        self.hour_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(time_frame, text="시간").pack(side="left")
+        
+        self.min_entry = ctk.CTkEntry(time_frame, width=60, placeholder_text="0")
+        self.min_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(time_frame, text="분").pack(side="left")
+
+        # Tab 2: Schedule
+        schedule_frame = ctk.CTkFrame(self.tab_schedule, fg_color="transparent")
+        schedule_frame.pack(pady=20)
+        
+        self.target_hour_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="24시")
+        self.target_hour_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(schedule_frame, text="시").pack(side="left")
+        
+        self.target_min_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="분")
+        self.target_min_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(schedule_frame, text="분").pack(side="left")
+        
+        ctk.CTkLabel(self.tab_schedule, text="* 입력한 시간에 종료됩니다.", font=("Arial", 12), text_color="gray").pack()
+
+        # Tab 3: Specific Game
+        game_frame = ctk.CTkFrame(self.tab_game, fg_color="transparent")
+        game_frame.pack(pady=20)
+
+        self.game_hour_entry = ctk.CTkEntry(game_frame, width=60, placeholder_text="0")
+        self.game_hour_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(game_frame, text="시간").pack(side="left")
+
+        self.game_min_entry = ctk.CTkEntry(game_frame, width=60, placeholder_text="0")
+        self.game_min_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(game_frame, text="분").pack(side="left")
+
+        self.game_name_entry = ctk.CTkEntry(self.tab_game, placeholder_text="프로세스 이름 (예: Roblox)")
+        self.game_name_entry.insert(0, "Roblox")
+        self.game_name_entry.pack(pady=10)
+        
+        ctk.CTkLabel(self.tab_game, text="* 게임이 실행 중일 때만 시간이 차감됩니다.", font=("Arial", 12), text_color="gray").pack()
+
+        # Action Selection
+        ctk.CTkLabel(self.container, text="시간 종료 후 동작").pack(pady=(10, 5))
+        ctk.CTkRadioButton(self.container, text="시스템 종료", variable=self.action_var, value="shutdown").pack(pady=5)
+        ctk.CTkRadioButton(self.container, text="로그오프", variable=self.action_var, value="logoff").pack(pady=5)
+
+        ctk.CTkButton(self.container, text="타이머 시작", command=self.start_timer, fg_color="green").pack(pady=20, fill="x")
+        
+        ctk.CTkButton(self.container, text="비밀번호 변경", command=self.change_password_dialog, fg_color="gray").pack(pady=5, fill="x")
+
+        self.load_saved_settings()
+
+    def load_saved_settings(self):
+        settings = utils.load_settings()
+        if not settings:
+            return
+
+        try:
+            if "game_h" in settings: 
+                self.game_hour_entry.delete(0, "end")
+                self.game_hour_entry.insert(0, settings["game_h"])
+            if "game_m" in settings: 
+                self.game_min_entry.delete(0, "end")
+                self.game_min_entry.insert(0, settings["game_m"])
+            if "game_name" in settings: 
+                self.game_name_entry.delete(0, "end")
+                self.game_name_entry.insert(0, settings["game_name"])
+                
+            if "duration_h" in settings: 
+                self.hour_entry.delete(0, "end")
+                self.hour_entry.insert(0, settings["duration_h"])
+            if "duration_m" in settings: 
+                self.min_entry.delete(0, "end")
+                self.min_entry.insert(0, settings["duration_m"])
+            
+            if "schedule_h" in settings: 
+                self.target_hour_entry.delete(0, "end")
+                self.target_hour_entry.insert(0, settings["schedule_h"])
+            if "schedule_m" in settings: 
+                self.target_min_entry.delete(0, "end")
+                self.target_min_entry.insert(0, settings["schedule_m"])
+            
+            if "action" in settings: self.action_var.set(settings["action"])
+            
+            if "last_tab" in settings:
+                self.tab_view.set(settings["last_tab"])
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+
+    def change_password_dialog(self):
+        dialog = ctk.CTkInputDialog(text="현재 비밀번호를 입력하세요:", title="비밀번호 변경")
+        current_pw = dialog.get_input()
+        
+        if current_pw and utils.check_password(current_pw):
+            self.show_setup_password() # Re-use setup screen for new password
+        else:
+            if current_pw is not None:
+                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+
+    def start_timer(self):
+        total_seconds = 0
+        process_name = None
+        
+        try:
+            current_tab = self.tab_view.get()
+            
+            # Save settings
+            settings = {
+                "last_tab": current_tab,
+                "action": self.action_var.get(),
+                "game_h": self.game_hour_entry.get(),
+                "game_m": self.game_min_entry.get(),
+                "game_name": self.game_name_entry.get(),
+                "duration_h": self.hour_entry.get(),
+                "duration_m": self.min_entry.get(),
+                "schedule_h": self.target_hour_entry.get(),
+                "schedule_m": self.target_min_entry.get()
+            }
+            utils.save_settings(settings)
+            
+            if current_tab == "카운트다운":
+                h = int(self.hour_entry.get() or 0)
+                m = int(self.min_entry.get() or 0)
+                total_seconds = (h * 60 + m) * 60
+
+            elif current_tab == "특정 게임":
+                h = int(self.game_hour_entry.get() or 0)
+                m = int(self.game_min_entry.get() or 0)
+                total_seconds = (h * 60 + m) * 60
+                process_name = self.game_name_entry.get()
+                if not process_name:
+                    messagebox.showerror("오류", "게임 이름을 입력해주세요.")
+                    return
+                
+            else: # 특정 시간
+                target_h = int(self.target_hour_entry.get())
+                target_m = int(self.target_min_entry.get() or 0)
+                
+                if not (0 <= target_h <= 23 and 0 <= target_m <= 59):
+                    raise ValueError("올바른 시간을 입력해주세요.")
+                
+                now = datetime.now()
+                target = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+                
+                if target <= now:
+                    target += timedelta(days=1)
+                    
+                total_seconds = int((target - now).total_seconds())
+
+        except ValueError:
+            messagebox.showerror("오류", "올바른 시간을 입력해주세요.")
+            return
+
+        if total_seconds <= 0:
+            messagebox.showerror("오류", "시간을 1분 이상 설정해주세요.")
+            return
+
+        if process_name:
+            self.timer = ProcessTimer(total_seconds, process_name, self.update_timer_display, self.on_timer_finish, self.on_warning)
+        else:
+            self.timer = GameTimer(total_seconds, self.update_timer_display, self.on_timer_finish, self.on_warning)
+        self.timer.start()
+        self.show_timer_screen()
+
+    def show_timer_screen(self):
+        self.clear_container()
+        
+        ctk.CTkLabel(self.container, text="남은 시간", font=("Arial", 20)).pack(pady=(40, 10))
+        
+        self.time_label = ctk.CTkLabel(self.container, text="00:00:00", font=("Arial", 48, "bold"), text_color="#FF5555")
+        self.time_label.pack(pady=20)
+
+        ctk.CTkButton(self.container, text="타이머 중지 / 변경", command=self.prompt_stop_timer, fg_color="red").pack(pady=40, fill="x")
+        
+        # Mini mode hint
+        ctk.CTkLabel(self.container, text="* 창을 닫아도 타이머는 계속 작동합니다.", font=("Arial", 12), text_color="gray").pack(side="bottom", pady=10)
+
+    def update_timer_display(self, time_str):
+        self.time_label.configure(text=time_str)
+
+    def on_warning(self, remaining_seconds):
+        # Bring window to front
+        self.deiconify()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.attributes("-topmost", False)
+        
+        minutes = remaining_seconds // 60
+        messagebox.showwarning("시간 경고", f"게임 시간이 {minutes}분 남았습니다!")
+
+    def on_timer_finish(self):
+        action = self.action_var.get()
+        if action == "shutdown":
+            system_control.shutdown_system()
+        elif action == "logoff":
+            system_control.logoff_system()
+
+    def prompt_stop_timer(self):
+        dialog = ctk.CTkInputDialog(text="비밀번호를 입력하세요:", title="비밀번호 확인")
+        pw = dialog.get_input()
+        
+        if pw and utils.check_password(pw):
+            if self.timer:
+                self.timer.stop()
+            self.show_dashboard()
+        else:
+            if pw is not None: # Cancel returns None
+                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+
+    def on_closing(self):
+        if self.timer and self.timer.running:
+            if messagebox.askokcancel("종료", "타이머가 작동 중입니다. 정말 종료하시겠습니까?\n(종료하려면 비밀번호가 필요합니다)"):
+                self.prompt_stop_timer()
+        else:
+            self.destroy()
+
+if __name__ == "__main__":
+    app = GameTimerApp()
+    app.protocol("WM_DELETE_WINDOW", app.on_closing)
+    app.mainloop()
