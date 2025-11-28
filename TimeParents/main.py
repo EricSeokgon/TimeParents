@@ -40,9 +40,11 @@ class GameTimerApp(ctk.CTk):
 
         self.pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호")
         self.pw_entry.pack(pady=10, fill="x")
+        self.pw_entry.bind("<Return>", lambda e: self.pw_confirm.focus())
         
         self.pw_confirm = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호 확인")
         self.pw_confirm.pack(pady=10, fill="x")
+        self.pw_confirm.bind("<Return>", lambda e: self.set_password())
 
         ctk.CTkButton(self.container, text="설정 완료", command=self.set_password).pack(pady=20, fill="x")
 
@@ -68,6 +70,7 @@ class GameTimerApp(ctk.CTk):
         
         self.login_pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호 입력")
         self.login_pw_entry.pack(pady=20, fill="x")
+        self.login_pw_entry.bind("<Return>", lambda e: self.login())
 
         ctk.CTkButton(self.container, text="로그인", command=self.login).pack(pady=20, fill="x")
 
