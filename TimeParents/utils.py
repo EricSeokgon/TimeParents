@@ -121,3 +121,14 @@ def get_weekly_stats():
         weekly_data.append((day_names[i], total_seconds))
     
     return weekly_data
+
+def save_language(lang_code):
+    """Save language preference"""
+    settings = load_settings()
+    settings["language"] = lang_code
+    save_settings(settings)
+
+def load_language():
+    """Load language preference, default to Korean"""
+    settings = load_settings()
+    return settings.get("language", "ko")
