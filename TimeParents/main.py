@@ -267,6 +267,7 @@ class GameTimerApp(ctk.CTk):
         self.game_min_entry.pack(side="left", padx=5)
         ctk.CTkLabel(game_frame, text="분").pack(side="left")
 
+        ctk.CTkLabel(self.tab_game, text="게임 프로세스 이름", font=("Arial", 12)).pack(pady=(10, 5))
         self.game_name_entry = ctk.CTkEntry(self.tab_game, placeholder_text="프로세스 이름 (예: Roblox)")
         self.game_name_entry.insert(0, "Roblox")
         self.game_name_entry.pack(pady=10)
