@@ -378,6 +378,11 @@ class GameTimerApp(ctk.CTk):
         
         if pw and utils.check_password(pw):
             if self.timer:
+                # Calculate used time
+                used_seconds = self.initial_duration - self.timer.remaining
+                if used_seconds > 0:
+                    utils.save_log(used_seconds, self.timer_type, self.timer_target)
+                
                 self.timer.stop()
             self.show_dashboard()
         else:
