@@ -5,6 +5,9 @@ import system_control
 from timer_logic import GameTimer, ProcessTimer
 import sys
 from datetime import datetime, timedelta
+import webbrowser
+
+VERSION = "1.0.1"
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -54,7 +57,7 @@ class GameTimerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("타임페어런츠(TimeParents)")
+        self.title(f"타임페어런츠(TimeParents) v{VERSION}")
         self.geometry("400x650")
         self.resizable(False, False)
 
@@ -187,6 +190,7 @@ class GameTimerApp(ctk.CTk):
         ctk.CTkButton(self.container, text="타이머 시작", command=self.start_timer, fg_color="green").pack(pady=20, fill="x")
         
         ctk.CTkButton(self.container, text="비밀번호 변경", command=self.change_password_dialog, fg_color="gray").pack(pady=5, fill="x")
+        ctk.CTkButton(self.container, text="만든이 소개", command=self.show_about_dialog, fg_color="gray").pack(pady=5, fill="x")
 
         self.load_saved_settings()
 
@@ -236,6 +240,26 @@ class GameTimerApp(ctk.CTk):
         else:
             if current_pw is not None:
                 messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+
+    def show_about_dialog(self):
+        about_window = ctk.CTkToplevel(self)
+        about_window.title("만든이 소개")
+        about_window.geometry("300x250")
+        about_window.resizable(False, False)
+        
+        # Center the dialog
+        about_window.transient(self)
+        about_window.grab_set()
+        
+        ctk.CTkLabel(about_window, text=f"타임페어런츠 v{VERSION}", font=("Arial", 18, "bold")).pack(pady=(30, 10))
+        
+        ctk.CTkLabel(about_window, text="제작자: HadesYI", font=("Arial", 14)).pack(pady=5)
+        
+        link = ctk.CTkLabel(about_window, text="https://hadesyi.tistory.com/", font=("Arial", 12), text_color="#3B8ED0", cursor="hand2")
+        link.pack(pady=5)
+        link.bind("<Button-1>", lambda e: webbrowser.open("https://hadesyi.tistory.com/"))
+        
+        ctk.CTkButton(about_window, text="확인", command=about_window.destroy, width=100).pack(pady=30)
 
     def start_timer(self):
         total_seconds = 0
@@ -319,6 +343,11 @@ class GameTimerApp(ctk.CTk):
         self.time_label.configure(text=time_str)
 
     def on_warning(self, remaining_seconds):
+        # Use after() to schedule the warning dialog in the main thread
+        # This prevents blocking the timer thread
+        self.after(0, self._show_warning_dialog, remaining_seconds)
+    
+    def _show_warning_dialog(self, remaining_seconds):
         # Bring window to front
         self.deiconify()
         self.lift()
