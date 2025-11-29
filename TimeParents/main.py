@@ -53,6 +53,94 @@ class PasswordDialog(ctk.CTkToplevel):
         self.wait_window()
         return self.result
 
+class TimePickerDialog(ctk.CTkToplevel):
+    def __init__(self, parent, initial_hour=12, initial_min=0):
+        super().__init__(parent)
+        self.title("시간 선택")
+        self.geometry("300x250")
+        self.resizable(False, False)
+        
+        self.result = None
+        
+        # Center the dialog
+        self.transient(parent)
+        self.grab_set()
+        
+        # Label
+        ctk.CTkLabel(self, text="종료 시간을 선택하세요", font=("Arial", 16, "bold")).pack(pady=20)
+        
+        # Time picker frame
+        time_frame = ctk.CTkFrame(self, fg_color="transparent")
+        time_frame.pack(pady=20)
+        
+        # Hour picker
+        hour_frame = ctk.CTkFrame(time_frame, fg_color="transparent")
+        hour_frame.pack(side="left", padx=20)
+        
+        ctk.CTkLabel(hour_frame, text="시", font=("Arial", 14)).pack()
+        self.hour_var = ctk.StringVar(value=str(initial_hour))
+        hour_spinbox = ctk.CTkSegmentedButton(hour_frame, values=[str(i) for i in range(24)], 
+                                               variable=self.hour_var, width=100)
+        
+        # Create custom hour selector with buttons
+        self.hour_value = initial_hour
+        self.hour_label = ctk.CTkLabel(hour_frame, text=f"{self.hour_value:02d}", font=("Arial", 32, "bold"))
+        self.hour_label.pack(pady=10)
+        
+        hour_btn_frame = ctk.CTkFrame(hour_frame, fg_color="transparent")
+        hour_btn_frame.pack()
+        ctk.CTkButton(hour_btn_frame, text="▲", width=50, command=self.hour_up).pack()
+        ctk.CTkButton(hour_btn_frame, text="▼", width=50, command=self.hour_down).pack()
+        
+        # Minute picker
+        min_frame = ctk.CTkFrame(time_frame, fg_color="transparent")
+        min_frame.pack(side="left", padx=20)
+        
+        ctk.CTkLabel(min_frame, text="분", font=("Arial", 14)).pack()
+        self.min_value = initial_min
+        self.min_label = ctk.CTkLabel(min_frame, text=f"{self.min_value:02d}", font=("Arial", 32, "bold"))
+        self.min_label.pack(pady=10)
+        
+        min_btn_frame = ctk.CTkFrame(min_frame, fg_color="transparent")
+        min_btn_frame.pack()
+        ctk.CTkButton(min_btn_frame, text="▲", width=50, command=self.min_up).pack()
+        ctk.CTkButton(min_btn_frame, text="▼", width=50, command=self.min_down).pack()
+        
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        ctk.CTkButton(btn_frame, text="확인", command=self.ok_clicked, width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="취소", command=self.cancel_clicked, width=100).pack(side="left", padx=5)
+    
+    def hour_up(self):
+        self.hour_value = (self.hour_value + 1) % 24
+        self.hour_label.configure(text=f"{self.hour_value:02d}")
+    
+    def hour_down(self):
+        self.hour_value = (self.hour_value - 1) % 24
+        self.hour_label.configure(text=f"{self.hour_value:02d}")
+    
+    def min_up(self):
+        self.min_value = (self.min_value + 1) % 60
+        self.min_label.configure(text=f"{self.min_value:02d}")
+    
+    def min_down(self):
+        self.min_value = (self.min_value - 1) % 60
+        self.min_label.configure(text=f"{self.min_value:02d}")
+    
+    def ok_clicked(self):
+        self.result = (self.hour_value, self.min_value)
+        self.destroy()
+    
+    def cancel_clicked(self):
+        self.result = None
+        self.destroy()
+    
+    def get_input(self):
+        self.wait_window()
+        return self.result
+
 class GameTimerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -162,6 +250,9 @@ class GameTimerApp(ctk.CTk):
         self.target_min_entry.pack(side="left", padx=5)
         ctk.CTkLabel(schedule_frame, text="분").pack(side="left")
         
+        # Time picker button
+        ctk.CTkButton(self.tab_schedule, text="🕐 시간 선택", command=self.open_time_picker, width=150).pack(pady=10)
+        
         ctk.CTkLabel(self.tab_schedule, text="* 입력한 시간에 종료됩니다.", font=("Arial", 12), text_color="gray").pack()
 
         # Tab 3: Specific Game
@@ -262,6 +353,28 @@ class GameTimerApp(ctk.CTk):
         link.bind("<Button-1>", lambda e: webbrowser.open("https://hadesyi.tistory.com/"))
         
         ctk.CTkButton(about_window, text="확인", command=about_window.destroy, width=100).pack(pady=30)
+
+    def open_time_picker(self):
+        # Get current values or defaults
+        try:
+            initial_hour = int(self.target_hour_entry.get()) if self.target_hour_entry.get() else 12
+        except:
+            initial_hour = 12
+        
+        try:
+            initial_min = int(self.target_min_entry.get()) if self.target_min_entry.get() else 0
+        except:
+            initial_min = 0
+        
+        dialog = TimePickerDialog(self, initial_hour, initial_min)
+        result = dialog.get_input()
+        
+        if result:
+            hour, minute = result
+            self.target_hour_entry.delete(0, "end")
+            self.target_hour_entry.insert(0, str(hour))
+            self.target_min_entry.delete(0, "end")
+            self.target_min_entry.insert(0, str(minute))
 
     def show_statistics(self):
         # Password check (optional, but good for privacy)
