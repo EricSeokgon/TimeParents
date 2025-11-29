@@ -274,7 +274,7 @@ class GameTimerApp(ctk.CTk):
 
         stats_window = ctk.CTkToplevel(self)
         stats_window.title("사용 통계")
-        stats_window.geometry("400x500")
+        stats_window.geometry("400x650")
         
         # Center
         stats_window.transient(self)
@@ -287,6 +287,33 @@ class GameTimerApp(ctk.CTk):
         
         ctk.CTkLabel(stats_window, text="오늘 총 사용 시간", font=("Arial", 16, "bold")).pack(pady=(20, 5))
         ctk.CTkLabel(stats_window, text=today_str, font=("Arial", 24, "bold"), text_color="#3B8ED0").pack(pady=(0, 20))
+        
+        # Weekly Stats
+        ctk.CTkLabel(stats_window, text="이번 주 사용 통계", font=("Arial", 14, "bold")).pack(pady=(10, 5), anchor="w", padx=20)
+        
+        weekly_frame = ctk.CTkFrame(stats_window)
+        weekly_frame.pack(pady=5, padx=20, fill="x")
+        
+        weekly_data = utils.get_weekly_stats()
+        max_seconds = max([s for _, s in weekly_data]) if any(s for _, s in weekly_data) else 1
+        
+        for day_name, seconds in weekly_data:
+            day_frame = ctk.CTkFrame(weekly_frame, fg_color="transparent")
+            day_frame.pack(fill="x", pady=2)
+            
+            # Day name
+            ctk.CTkLabel(day_frame, text=day_name, width=60, anchor="w").pack(side="left", padx=5)
+            
+            # Bar visualization
+            bar_width = int((seconds / max_seconds) * 200) if max_seconds > 0 else 0
+            bar_frame = ctk.CTkFrame(day_frame, width=bar_width, height=20, fg_color="#3B8ED0")
+            bar_frame.pack(side="left", padx=5)
+            bar_frame.pack_propagate(False)
+            
+            # Time display
+            h, m = divmod(seconds // 60, 60)
+            time_str = f"{h}h {m}m" if h > 0 else f"{m}m"
+            ctk.CTkLabel(day_frame, text=time_str, width=60, anchor="w").pack(side="left", padx=5)
         
         # Logs List
         ctk.CTkLabel(stats_window, text="최근 사용 기록", font=("Arial", 14)).pack(pady=5, anchor="w", padx=20)

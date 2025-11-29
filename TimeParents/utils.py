@@ -94,3 +94,30 @@ def get_today_total():
             total_seconds += log.get("duration", 0)
             
     return total_seconds
+
+def get_weekly_stats():
+    """Returns a list of 7 tuples: (day_name, total_seconds) for Mon-Sun of current week"""
+    from datetime import timedelta
+    
+    logs = load_logs()
+    now = datetime.now()
+    
+    # Get Monday of current week (weekday 0 = Monday)
+    days_since_monday = now.weekday()
+    monday = now - timedelta(days=days_since_monday)
+    
+    weekly_data = []
+    day_names = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+    
+    for i in range(7):
+        day = monday + timedelta(days=i)
+        day_str = day.strftime("%Y-%m-%d")
+        total_seconds = 0
+        
+        for log in logs:
+            if log["timestamp"].startswith(day_str):
+                total_seconds += log.get("duration", 0)
+        
+        weekly_data.append((day_names[i], total_seconds))
+    
+    return weekly_data
