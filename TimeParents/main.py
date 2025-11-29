@@ -16,7 +16,7 @@ class PasswordDialog(ctk.CTkToplevel):
     def __init__(self, parent, title="비밀번호 입력", text="비밀번호를 입력하세요:"):
         super().__init__(parent)
         self.title(title)
-        self.geometry("300x150")
+        self.geometry("300x200")
         self.resizable(False, False)
         
         self.result = None
@@ -244,7 +244,7 @@ class GameTimerApp(ctk.CTk):
     def show_about_dialog(self):
         about_window = ctk.CTkToplevel(self)
         about_window.title("만든이 소개")
-        about_window.geometry("300x250")
+        about_window.geometry("300x350")
         about_window.resizable(False, False)
         
         # Center the dialog
@@ -320,6 +320,10 @@ class GameTimerApp(ctk.CTk):
             messagebox.showerror("오류", "시간을 1분 이상 설정해주세요.")
             return
 
+        self.initial_duration = total_seconds
+        self.timer_type = "game" if process_name else ("schedule" if current_tab == "특정 시간" else "countdown")
+        self.timer_target = process_name
+
         if process_name:
             self.timer = ProcessTimer(total_seconds, process_name, self.update_timer_display, self.on_timer_finish, self.on_warning)
         else:
@@ -359,6 +363,9 @@ class GameTimerApp(ctk.CTk):
         messagebox.showwarning("시간 경고", f"게임 시간이 {minutes}분 남았습니다!")
 
     def on_timer_finish(self):
+        # Save log
+        utils.save_log(self.initial_duration, self.timer_type, self.timer_target)
+        
         action = self.action_var.get()
         if action == "shutdown":
             system_control.shutdown_system()

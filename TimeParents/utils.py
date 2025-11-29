@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+from datetime import datetime
 
 PASSWORD_FILE = "password.json"
 
@@ -43,10 +44,53 @@ def save_settings(settings):
 
 def load_settings():
     """설정을 파일에서 불러옵니다."""
-    if not os.path.exists(SETTINGS_FILE):
-        return {}
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+STATS_FILE = "stats.json"
+
+def save_log(duration_seconds, type_str, target=None):
+    log_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "duration": duration_seconds,
+        "type": type_str,
+        "target": target
+    }
+    
+    logs = load_logs()
+    logs.append(log_entry)
+    
+    # Keep only last 1000 logs to prevent file from growing too large
+    if len(logs) > 1000:
+        logs = logs[-1000:]
+        
     try:
-        with open(SETTINGS_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+        with open(STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving log: {e}")
+
+def load_logs():
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def get_today_total():
+    logs = load_logs()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    total_seconds = 0
+    
+    for log in logs:
+        if log["timestamp"].startswith(today_str):
+            total_seconds += log.get("duration", 0)
+            
+    return total_seconds
