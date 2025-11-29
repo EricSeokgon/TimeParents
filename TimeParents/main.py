@@ -254,6 +254,7 @@ class GameTimerApp(ctk.CTk):
         ctk.CTkLabel(about_window, text=f"타임페어런츠 v{VERSION}", font=("Arial", 18, "bold")).pack(pady=(30, 10))
         
         ctk.CTkLabel(about_window, text="제작자: HadesYI", font=("Arial", 14)).pack(pady=5)
+        ctk.CTkLabel(about_window, text="Email : leesk55@gmail.com", font=("Arial", 14)).pack(pady=5)
         
         link = ctk.CTkLabel(about_window, text="https://hadesyi.tistory.com/", font=("Arial", 12), text_color="#3B8ED0", cursor="hand2")
         link.pack(pady=5)
