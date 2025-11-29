@@ -191,6 +191,7 @@ class GameTimerApp(ctk.CTk):
         
         ctk.CTkButton(self.container, text="비밀번호 변경", command=self.change_password_dialog, fg_color="gray").pack(pady=5, fill="x")
         ctk.CTkButton(self.container, text="만든이 소개", command=self.show_about_dialog, fg_color="gray").pack(pady=5, fill="x")
+        ctk.CTkButton(self.container, text="통계 보기", command=self.show_statistics, fg_color="#3B8ED0").pack(pady=5, fill="x")
 
         self.load_saved_settings()
 
@@ -261,6 +262,62 @@ class GameTimerApp(ctk.CTk):
         link.bind("<Button-1>", lambda e: webbrowser.open("https://hadesyi.tistory.com/"))
         
         ctk.CTkButton(about_window, text="확인", command=about_window.destroy, width=100).pack(pady=30)
+
+    def show_statistics(self):
+        # Password check (optional, but good for privacy)
+        dialog = PasswordDialog(self, title="관리자 확인", text="비밀번호를 입력하세요:")
+        pw = dialog.get_input()
+        if not pw or not utils.check_password(pw):
+            if pw is not None:
+                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+            return
+
+        stats_window = ctk.CTkToplevel(self)
+        stats_window.title("사용 통계")
+        stats_window.geometry("400x500")
+        
+        # Center
+        stats_window.transient(self)
+        stats_window.grab_set()
+        
+        # Today's Total
+        today_seconds = utils.get_today_total()
+        h, m = divmod(today_seconds // 60, 60)
+        today_str = f"{h}시간 {m}분"
+        
+        ctk.CTkLabel(stats_window, text="오늘 총 사용 시간", font=("Arial", 16, "bold")).pack(pady=(20, 5))
+        ctk.CTkLabel(stats_window, text=today_str, font=("Arial", 24, "bold"), text_color="#3B8ED0").pack(pady=(0, 20))
+        
+        # Logs List
+        ctk.CTkLabel(stats_window, text="최근 사용 기록", font=("Arial", 14)).pack(pady=5, anchor="w", padx=20)
+        
+        scroll_frame = ctk.CTkScrollableFrame(stats_window, width=360, height=300)
+        scroll_frame.pack(pady=10, padx=20, fill="both", expand=True)
+        
+        logs = utils.load_logs()
+        if not logs:
+            ctk.CTkLabel(scroll_frame, text="기록이 없습니다.").pack(pady=20)
+        else:
+            for log in reversed(logs): # Show newest first
+                frame = ctk.CTkFrame(scroll_frame)
+                frame.pack(fill="x", pady=2)
+                
+                # Format: [Time] Type (Duration)
+                # 2023-11-29 18:00 | Game (Roblox) | 1h 30m
+                
+                ts = log["timestamp"][5:-3] # MM-DD HH:MM
+                duration = log["duration"]
+                dh, dm = divmod(duration // 60, 60)
+                dur_str = f"{dh}시간 {dm}분" if dh > 0 else f"{dm}분"
+                
+                type_map = {"game": "게임", "countdown": "카운트다운", "schedule": "스케줄"}
+                type_str = type_map.get(log["type"], log["type"])
+                if log.get("target"):
+                    type_str += f" ({log['target']})"
+                
+                ctk.CTkLabel(frame, text=ts, width=80, anchor="w").pack(side="left", padx=5)
+                ctk.CTkLabel(frame, text=type_str, anchor="w").pack(side="left", padx=5, expand=True, fill="x")
+                ctk.CTkLabel(frame, text=dur_str, width=60, anchor="e").pack(side="right", padx=5)
 
     def start_timer(self):
         total_seconds = 0
