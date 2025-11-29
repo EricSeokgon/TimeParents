@@ -57,7 +57,7 @@ class TimePickerDialog(ctk.CTkToplevel):
     def __init__(self, parent, initial_hour=12, initial_min=0):
         super().__init__(parent)
         self.title("시간 선택")
-        self.geometry("300x250")
+        self.geometry("300x350")
         self.resizable(False, False)
         
         self.result = None
