@@ -8,9 +8,11 @@ from datetime import datetime, timedelta
 import webbrowser
 import languages
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
-ctk.set_appearance_mode("Dark")
+# Load theme before creating app
+current_theme = utils.load_theme()
+ctk.set_appearance_mode(current_theme)
 ctk.set_default_color_theme("blue")
 
 class PasswordDialog(ctk.CTkToplevel):
@@ -302,13 +304,21 @@ class GameTimerApp(ctk.CTk):
         lang_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         lang_frame.pack(pady=5, fill="x")
         
+        # Language
         ctk.CTkLabel(lang_frame, text="🌐 " + languages.get_text("language", self.current_lang), width=60).pack(side="left", padx=5)
-        
         self.lang_var = ctk.StringVar(value=self.current_lang)
         lang_menu = ctk.CTkOptionMenu(lang_frame, variable=self.lang_var, 
                                       values=["ko", "en"],
-                                      command=self.change_language)
-        lang_menu.pack(side="right", padx=5, fill="x", expand=True)
+                                      command=self.change_language, width=100)
+        lang_menu.pack(side="left", padx=5)
+        
+        # Theme
+        ctk.CTkLabel(lang_frame, text="🎨 " + languages.get_text("theme", self.current_lang), width=60).pack(side="left", padx=(20, 5))
+        self.theme_var = ctk.StringVar(value=utils.load_theme())
+        theme_menu = ctk.CTkOptionMenu(lang_frame, variable=self.theme_var,
+                                       values=["Dark", "Light"],
+                                       command=self.change_theme, width=100)
+        theme_menu.pack(side="left", padx=5)
 
         self.load_saved_settings()
 
@@ -317,6 +327,10 @@ class GameTimerApp(ctk.CTk):
         self.current_lang = choice
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
         self.show_dashboard()
+
+    def change_theme(self, choice):
+        utils.save_theme(choice)
+        ctk.set_appearance_mode(choice)
 
     def load_saved_settings(self):
         settings = utils.load_settings()

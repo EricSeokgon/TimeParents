@@ -132,3 +132,14 @@ def load_language():
     """Load language preference, default to Korean"""
     settings = load_settings()
     return settings.get("language", "ko")
+
+def save_theme(theme_mode):
+    """Save theme preference"""
+    settings = load_settings()
+    settings["theme"] = theme_mode
+    save_settings(settings)
+
+def load_theme():
+    """Load theme preference, default to Dark"""
+    settings = load_settings()
+    return settings.get("theme", "Dark")

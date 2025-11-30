@@ -101,6 +101,11 @@ LANGUAGES = {
         "language": "언어",
         "korean": "한국어",
         "english": "English",
+        
+        # Theme
+        "theme": "테마",
+        "dark_mode": "다크 모드",
+        "light_mode": "라이트 모드",
     },
     
     "en": {
@@ -203,6 +208,11 @@ LANGUAGES = {
         "language": "Language",
         "korean": "한국어",
         "english": "English",
+        
+        # Theme
+        "theme": "Theme",
+        "dark_mode": "Dark Mode",
+        "light_mode": "Light Mode",
     }
 }
 
