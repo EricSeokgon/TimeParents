@@ -159,7 +159,7 @@ class GameTimerApp(ctk.CTk):
 
         self.current_lang = utils.load_language()
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
-        self.geometry("400x650")
+        self.geometry("400x750")
         self.resizable(False, False)
 
         self.timer = None
