@@ -6,6 +6,7 @@ from timer_logic import GameTimer, ProcessTimer
 import sys
 from datetime import datetime, timedelta
 import webbrowser
+import languages
 
 VERSION = "1.0.1"
 
@@ -13,8 +14,16 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class PasswordDialog(ctk.CTkToplevel):
-    def __init__(self, parent, title="비밀번호 입력", text="비밀번호를 입력하세요:"):
+    def __init__(self, parent, title=None, text=None):
         super().__init__(parent)
+        
+        self.lang = utils.load_language()
+        
+        if title is None:
+            title = languages.get_text("password_input", self.lang)
+        if text is None:
+            text = languages.get_text("password_enter", self.lang)
+            
         self.title(title)
         self.geometry("300x200")
         self.resizable(False, False)
@@ -38,8 +47,8 @@ class PasswordDialog(ctk.CTkToplevel):
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(pady=10)
         
-        ctk.CTkButton(btn_frame, text="확인", command=self.ok_clicked, width=100).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="취소", command=self.cancel_clicked, width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text=languages.get_text("confirm", self.lang), command=self.ok_clicked, width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text=languages.get_text("cancel", self.lang), command=self.cancel_clicked, width=100).pack(side="left", padx=5)
     
     def ok_clicked(self):
         self.result = self.pw_entry.get()
@@ -56,7 +65,10 @@ class PasswordDialog(ctk.CTkToplevel):
 class TimePickerDialog(ctk.CTkToplevel):
     def __init__(self, parent, initial_hour=12, initial_min=0):
         super().__init__(parent)
-        self.title("시간 선택")
+        
+        self.lang = utils.load_language()
+        
+        self.title(languages.get_text("time_picker_title", self.lang))
         self.geometry("300x350")
         self.resizable(False, False)
         
@@ -67,7 +79,7 @@ class TimePickerDialog(ctk.CTkToplevel):
         self.grab_set()
         
         # Label
-        ctk.CTkLabel(self, text="종료 시간을 선택하세요", font=("Arial", 16, "bold")).pack(pady=20)
+        ctk.CTkLabel(self, text=languages.get_text("select_end_time", self.lang), font=("Arial", 16, "bold")).pack(pady=20)
         
         # Time picker frame
         time_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -77,7 +89,7 @@ class TimePickerDialog(ctk.CTkToplevel):
         hour_frame = ctk.CTkFrame(time_frame, fg_color="transparent")
         hour_frame.pack(side="left", padx=20)
         
-        ctk.CTkLabel(hour_frame, text="시", font=("Arial", 14)).pack()
+        ctk.CTkLabel(hour_frame, text=languages.get_text("hour", self.lang), font=("Arial", 14)).pack()
         self.hour_var = ctk.StringVar(value=str(initial_hour))
         hour_spinbox = ctk.CTkSegmentedButton(hour_frame, values=[str(i) for i in range(24)], 
                                                variable=self.hour_var, width=100)
@@ -96,7 +108,7 @@ class TimePickerDialog(ctk.CTkToplevel):
         min_frame = ctk.CTkFrame(time_frame, fg_color="transparent")
         min_frame.pack(side="left", padx=20)
         
-        ctk.CTkLabel(min_frame, text="분", font=("Arial", 14)).pack()
+        ctk.CTkLabel(min_frame, text=languages.get_text("minute", self.lang), font=("Arial", 14)).pack()
         self.min_value = initial_min
         self.min_label = ctk.CTkLabel(min_frame, text=f"{self.min_value:02d}", font=("Arial", 32, "bold"))
         self.min_label.pack(pady=10)
@@ -110,8 +122,8 @@ class TimePickerDialog(ctk.CTkToplevel):
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(pady=20)
         
-        ctk.CTkButton(btn_frame, text="확인", command=self.ok_clicked, width=100).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="취소", command=self.cancel_clicked, width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text=languages.get_text("confirm", self.lang), command=self.ok_clicked, width=100).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text=languages.get_text("cancel", self.lang), command=self.cancel_clicked, width=100).pack(side="left", padx=5)
     
     def hour_up(self):
         self.hour_value = (self.hour_value + 1) % 24
@@ -145,7 +157,8 @@ class GameTimerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title(f"타임페어런츠(TimeParents) v{VERSION}")
+        self.current_lang = utils.load_language()
+        self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
         self.geometry("400x650")
         self.resizable(False, False)
 
@@ -167,64 +180,64 @@ class GameTimerApp(ctk.CTk):
     def show_setup_password(self):
         self.clear_container()
         
-        ctk.CTkLabel(self.container, text="비밀번호 설정", font=("Arial", 24, "bold")).pack(pady=20)
-        ctk.CTkLabel(self.container, text="초기 비밀번호를 설정해주세요.").pack(pady=10)
+        ctk.CTkLabel(self.container, text=languages.get_text("password_setup", self.current_lang), font=("Arial", 24, "bold")).pack(pady=20)
+        ctk.CTkLabel(self.container, text=languages.get_text("password_setup_msg", self.current_lang)).pack(pady=10)
 
-        self.pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호")
+        self.pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text=languages.get_text("password", self.current_lang))
         self.pw_entry.pack(pady=10, fill="x")
         self.pw_entry.bind("<Return>", lambda e: self.pw_confirm.focus())
         
-        self.pw_confirm = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호 확인")
+        self.pw_confirm = ctk.CTkEntry(self.container, show="*", placeholder_text=languages.get_text("password_confirm", self.current_lang))
         self.pw_confirm.pack(pady=10, fill="x")
         self.pw_confirm.bind("<Return>", lambda e: self.set_password())
 
-        ctk.CTkButton(self.container, text="설정 완료", command=self.set_password).pack(pady=20, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("setup_complete", self.current_lang), command=self.set_password).pack(pady=20, fill="x")
 
     def set_password(self):
         pw = self.pw_entry.get()
         confirm = self.pw_confirm.get()
 
         if not pw:
-            messagebox.showerror("오류", "비밀번호를 입력해주세요.")
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("password_empty", self.current_lang))
             return
         if pw != confirm:
-            messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("password_mismatch", self.current_lang))
             return
 
         utils.save_password(pw)
-        messagebox.showinfo("성공", "비밀번호가 설정되었습니다.")
+        messagebox.showinfo(languages.get_text("success", self.current_lang), languages.get_text("password_set_success", self.current_lang))
         self.show_dashboard()
 
     def show_login(self):
         self.clear_container()
         
-        ctk.CTkLabel(self.container, text="로그인", font=("Arial", 24, "bold")).pack(pady=40)
+        ctk.CTkLabel(self.container, text=languages.get_text("login", self.current_lang), font=("Arial", 24, "bold")).pack(pady=40)
         
-        self.login_pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text="비밀번호 입력")
+        self.login_pw_entry = ctk.CTkEntry(self.container, show="*", placeholder_text=languages.get_text("password_input", self.current_lang))
         self.login_pw_entry.pack(pady=20, fill="x")
         self.login_pw_entry.bind("<Return>", lambda e: self.login())
 
-        ctk.CTkButton(self.container, text="로그인", command=self.login).pack(pady=20, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("login", self.current_lang), command=self.login).pack(pady=20, fill="x")
 
     def login(self):
         pw = self.login_pw_entry.get()
         if utils.check_password(pw):
             self.show_dashboard()
         else:
-            messagebox.showerror("오류", "비밀번호가 올바르지 않습니다.")
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("password_incorrect", self.current_lang))
 
     def show_dashboard(self):
         self.clear_container()
 
-        ctk.CTkLabel(self.container, text="게임 시간 설정", font=("Arial", 24, "bold")).pack(pady=10)
+        ctk.CTkLabel(self.container, text=languages.get_text("game_time_settings", self.current_lang), font=("Arial", 24, "bold")).pack(pady=10)
 
         # Tab View
         self.tab_view = ctk.CTkTabview(self.container)
         self.tab_view.pack(pady=10, fill="x")
         
-        self.tab_game = self.tab_view.add("특정 게임")
-        self.tab_duration = self.tab_view.add("카운트다운")
-        self.tab_schedule = self.tab_view.add("특정 시간")
+        self.tab_game = self.tab_view.add(languages.get_text("tab_game", self.current_lang))
+        self.tab_duration = self.tab_view.add(languages.get_text("tab_countdown", self.current_lang))
+        self.tab_schedule = self.tab_view.add(languages.get_text("tab_schedule", self.current_lang))
         
         # Tab 1: Duration
         time_frame = ctk.CTkFrame(self.tab_duration, fg_color="transparent")
@@ -232,28 +245,28 @@ class GameTimerApp(ctk.CTk):
         
         self.hour_entry = ctk.CTkEntry(time_frame, width=60, placeholder_text="0")
         self.hour_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(time_frame, text="시간").pack(side="left")
+        ctk.CTkLabel(time_frame, text=languages.get_text("hours", self.current_lang)).pack(side="left")
         
         self.min_entry = ctk.CTkEntry(time_frame, width=60, placeholder_text="0")
         self.min_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(time_frame, text="분").pack(side="left")
+        ctk.CTkLabel(time_frame, text=languages.get_text("minutes", self.current_lang)).pack(side="left")
 
         # Tab 2: Schedule
         schedule_frame = ctk.CTkFrame(self.tab_schedule, fg_color="transparent")
         schedule_frame.pack(pady=20)
         
-        self.target_hour_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="24시")
+        self.target_hour_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="24" + languages.get_text("hour", self.current_lang))
         self.target_hour_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(schedule_frame, text="시").pack(side="left")
+        ctk.CTkLabel(schedule_frame, text=languages.get_text("hour", self.current_lang)).pack(side="left")
         
-        self.target_min_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="분")
+        self.target_min_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text=languages.get_text("minute", self.current_lang))
         self.target_min_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(schedule_frame, text="분").pack(side="left")
+        ctk.CTkLabel(schedule_frame, text=languages.get_text("minute", self.current_lang)).pack(side="left")
         
         # Time picker button
-        ctk.CTkButton(self.tab_schedule, text="🕐 시간 선택", command=self.open_time_picker, width=150).pack(pady=10)
+        ctk.CTkButton(self.tab_schedule, text=languages.get_text("time_picker", self.current_lang), command=self.open_time_picker, width=150).pack(pady=10)
         
-        ctk.CTkLabel(self.tab_schedule, text="* 입력한 시간에 종료됩니다.", font=("Arial", 12), text_color="gray").pack()
+        ctk.CTkLabel(self.tab_schedule, text=languages.get_text("schedule_note", self.current_lang), font=("Arial", 12), text_color="gray").pack()
 
         # Tab 3: Specific Game
         game_frame = ctk.CTkFrame(self.tab_game, fg_color="transparent")
@@ -261,31 +274,49 @@ class GameTimerApp(ctk.CTk):
 
         self.game_hour_entry = ctk.CTkEntry(game_frame, width=60, placeholder_text="0")
         self.game_hour_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(game_frame, text="시간").pack(side="left")
+        ctk.CTkLabel(game_frame, text=languages.get_text("hours", self.current_lang)).pack(side="left")
 
         self.game_min_entry = ctk.CTkEntry(game_frame, width=60, placeholder_text="0")
         self.game_min_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(game_frame, text="분").pack(side="left")
+        ctk.CTkLabel(game_frame, text=languages.get_text("minutes", self.current_lang)).pack(side="left")
 
-        ctk.CTkLabel(self.tab_game, text="게임 프로세스 이름", font=("Arial", 12)).pack(pady=(10, 5))
-        self.game_name_entry = ctk.CTkEntry(self.tab_game, placeholder_text="프로세스 이름 (예: Roblox)")
+        ctk.CTkLabel(self.tab_game, text=languages.get_text("game_process_name", self.current_lang), font=("Arial", 12)).pack(pady=(10, 5))
+        self.game_name_entry = ctk.CTkEntry(self.tab_game, placeholder_text=languages.get_text("process_name_placeholder", self.current_lang))
         self.game_name_entry.insert(0, "Roblox")
         self.game_name_entry.pack(pady=10)
         
-        ctk.CTkLabel(self.tab_game, text="* 게임이 실행 중일 때만 시간이 차감됩니다.", font=("Arial", 12), text_color="gray").pack()
+        ctk.CTkLabel(self.tab_game, text=languages.get_text("game_note", self.current_lang), font=("Arial", 12), text_color="gray").pack()
 
         # Action Selection
-        ctk.CTkLabel(self.container, text="시간 종료 후 동작").pack(pady=(10, 5))
-        ctk.CTkRadioButton(self.container, text="시스템 종료", variable=self.action_var, value="shutdown").pack(pady=5)
-        ctk.CTkRadioButton(self.container, text="로그오프", variable=self.action_var, value="logoff").pack(pady=5)
+        ctk.CTkLabel(self.container, text=languages.get_text("action_after_time", self.current_lang)).pack(pady=(10, 5))
+        ctk.CTkRadioButton(self.container, text=languages.get_text("shutdown", self.current_lang), variable=self.action_var, value="shutdown").pack(pady=5)
+        ctk.CTkRadioButton(self.container, text=languages.get_text("logoff", self.current_lang), variable=self.action_var, value="logoff").pack(pady=5)
 
-        ctk.CTkButton(self.container, text="타이머 시작", command=self.start_timer, fg_color="green").pack(pady=20, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("start_timer", self.current_lang), command=self.start_timer, fg_color="green").pack(pady=20, fill="x")
         
-        ctk.CTkButton(self.container, text="비밀번호 변경", command=self.change_password_dialog, fg_color="gray").pack(pady=5, fill="x")
-        ctk.CTkButton(self.container, text="만든이 소개", command=self.show_about_dialog, fg_color="gray").pack(pady=5, fill="x")
-        ctk.CTkButton(self.container, text="통계 보기", command=self.show_statistics, fg_color="#3B8ED0").pack(pady=5, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("password_change", self.current_lang), command=self.change_password_dialog, fg_color="gray").pack(pady=5, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("about", self.current_lang), command=self.show_about_dialog, fg_color="gray").pack(pady=5, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("statistics", self.current_lang), command=self.show_statistics, fg_color="#3B8ED0").pack(pady=5, fill="x")
+        
+        # Language Switcher
+        lang_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        lang_frame.pack(pady=5, fill="x")
+        
+        ctk.CTkLabel(lang_frame, text="🌐 " + languages.get_text("language", self.current_lang), width=60).pack(side="left", padx=5)
+        
+        self.lang_var = ctk.StringVar(value=self.current_lang)
+        lang_menu = ctk.CTkOptionMenu(lang_frame, variable=self.lang_var, 
+                                      values=["ko", "en"],
+                                      command=self.change_language)
+        lang_menu.pack(side="right", padx=5, fill="x", expand=True)
 
         self.load_saved_settings()
+
+    def change_language(self, choice):
+        utils.save_language(choice)
+        self.current_lang = choice
+        self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
+        self.show_dashboard()
 
     def load_saved_settings(self):
         settings = utils.load_settings()
@@ -325,18 +356,18 @@ class GameTimerApp(ctk.CTk):
             print(f"Error loading settings: {e}")
 
     def change_password_dialog(self):
-        dialog = PasswordDialog(self, title="비밀번호 변경", text="현재 비밀번호를 입력하세요:")
+        dialog = PasswordDialog(self, title=languages.get_text("password_change", self.current_lang), text=languages.get_text("current_password", self.current_lang))
         current_pw = dialog.get_input()
         
         if current_pw and utils.check_password(current_pw):
             self.show_setup_password() # Re-use setup screen for new password
         else:
             if current_pw is not None:
-                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+                messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("password_mismatch", self.current_lang))
 
     def show_about_dialog(self):
         about_window = ctk.CTkToplevel(self)
-        about_window.title("만든이 소개")
+        about_window.title(languages.get_text("about_title", self.current_lang))
         about_window.geometry("300x350")
         about_window.resizable(False, False)
         
@@ -344,16 +375,16 @@ class GameTimerApp(ctk.CTk):
         about_window.transient(self)
         about_window.grab_set()
         
-        ctk.CTkLabel(about_window, text=f"타임페어런츠 v{VERSION}", font=("Arial", 18, "bold")).pack(pady=(30, 10))
+        ctk.CTkLabel(about_window, text=f"{languages.get_text('app_title', self.current_lang)} v{VERSION}", font=("Arial", 18, "bold")).pack(pady=(30, 10))
         
-        ctk.CTkLabel(about_window, text="제작자: HadesYI", font=("Arial", 14)).pack(pady=5)
-        ctk.CTkLabel(about_window, text="Email : leesk55@gmail.com", font=("Arial", 14)).pack(pady=5)
+        ctk.CTkLabel(about_window, text=languages.get_text("creator", self.current_lang), font=("Arial", 14)).pack(pady=5)
+        ctk.CTkLabel(about_window, text=languages.get_text("email", self.current_lang), font=("Arial", 14)).pack(pady=5)
         
         link = ctk.CTkLabel(about_window, text="https://hadesyi.tistory.com/", font=("Arial", 12), text_color="#3B8ED0", cursor="hand2")
         link.pack(pady=5)
         link.bind("<Button-1>", lambda e: webbrowser.open("https://hadesyi.tistory.com/"))
         
-        ctk.CTkButton(about_window, text="확인", command=about_window.destroy, width=100).pack(pady=30)
+        ctk.CTkButton(about_window, text=languages.get_text("confirm", self.current_lang), command=about_window.destroy, width=100).pack(pady=30)
 
     def open_time_picker(self):
         # Get current values or defaults
@@ -379,15 +410,15 @@ class GameTimerApp(ctk.CTk):
 
     def show_statistics(self):
         # Password check (optional, but good for privacy)
-        dialog = PasswordDialog(self, title="관리자 확인", text="비밀번호를 입력하세요:")
+        dialog = PasswordDialog(self, title=languages.get_text("admin_confirm", self.current_lang), text=languages.get_text("password_enter", self.current_lang))
         pw = dialog.get_input()
         if not pw or not utils.check_password(pw):
             if pw is not None:
-                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+                messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("password_mismatch", self.current_lang))
             return
 
         stats_window = ctk.CTkToplevel(self)
-        stats_window.title("사용 통계")
+        stats_window.title(languages.get_text("stats_title", self.current_lang))
         stats_window.geometry("400x650")
         
         # Center
@@ -397,13 +428,13 @@ class GameTimerApp(ctk.CTk):
         # Today's Total
         today_seconds = utils.get_today_total()
         h, m = divmod(today_seconds // 60, 60)
-        today_str = f"{h}시간 {m}분"
+        today_str = f"{h}{languages.get_text('hour', self.current_lang)} {m}{languages.get_text('minute', self.current_lang)}"
         
-        ctk.CTkLabel(stats_window, text="오늘 총 사용 시간", font=("Arial", 16, "bold")).pack(pady=(20, 5))
+        ctk.CTkLabel(stats_window, text=languages.get_text("today_total", self.current_lang), font=("Arial", 16, "bold")).pack(pady=(20, 5))
         ctk.CTkLabel(stats_window, text=today_str, font=("Arial", 24, "bold"), text_color="#3B8ED0").pack(pady=(0, 20))
         
         # Weekly Stats
-        ctk.CTkLabel(stats_window, text="이번 주 사용 통계", font=("Arial", 14, "bold")).pack(pady=(10, 5), anchor="w", padx=20)
+        ctk.CTkLabel(stats_window, text=languages.get_text("weekly_stats", self.current_lang), font=("Arial", 14, "bold")).pack(pady=(10, 5), anchor="w", padx=20)
         
         weekly_frame = ctk.CTkFrame(stats_window)
         weekly_frame.pack(pady=5, padx=20, fill="x")
@@ -411,12 +442,15 @@ class GameTimerApp(ctk.CTk):
         weekly_data = utils.get_weekly_stats()
         max_seconds = max([s for _, s in weekly_data]) if any(s for _, s in weekly_data) else 1
         
-        for day_name, seconds in weekly_data:
+        day_keys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        
+        for i, (day_name, seconds) in enumerate(weekly_data):
             day_frame = ctk.CTkFrame(weekly_frame, fg_color="transparent")
             day_frame.pack(fill="x", pady=2)
             
-            # Day name
-            ctk.CTkLabel(day_frame, text=day_name, width=60, anchor="w").pack(side="left", padx=5)
+            # Day name (translated)
+            translated_day = languages.get_text(day_keys[i], self.current_lang)
+            ctk.CTkLabel(day_frame, text=translated_day, width=60, anchor="w").pack(side="left", padx=5)
             
             # Bar visualization
             bar_width = int((seconds / max_seconds) * 200) if max_seconds > 0 else 0
@@ -430,14 +464,14 @@ class GameTimerApp(ctk.CTk):
             ctk.CTkLabel(day_frame, text=time_str, width=60, anchor="w").pack(side="left", padx=5)
         
         # Logs List
-        ctk.CTkLabel(stats_window, text="최근 사용 기록", font=("Arial", 14)).pack(pady=5, anchor="w", padx=20)
+        ctk.CTkLabel(stats_window, text=languages.get_text("recent_logs", self.current_lang), font=("Arial", 14)).pack(pady=5, anchor="w", padx=20)
         
         scroll_frame = ctk.CTkScrollableFrame(stats_window, width=360, height=300)
         scroll_frame.pack(pady=10, padx=20, fill="both", expand=True)
         
         logs = utils.load_logs()
         if not logs:
-            ctk.CTkLabel(scroll_frame, text="기록이 없습니다.").pack(pady=20)
+            ctk.CTkLabel(scroll_frame, text=languages.get_text("no_logs", self.current_lang)).pack(pady=20)
         else:
             for log in reversed(logs): # Show newest first
                 frame = ctk.CTkFrame(scroll_frame)
@@ -449,9 +483,13 @@ class GameTimerApp(ctk.CTk):
                 ts = log["timestamp"][5:-3] # MM-DD HH:MM
                 duration = log["duration"]
                 dh, dm = divmod(duration // 60, 60)
-                dur_str = f"{dh}시간 {dm}분" if dh > 0 else f"{dm}분"
+                dur_str = f"{dh}{languages.get_text('hour', self.current_lang)} {dm}{languages.get_text('minute', self.current_lang)}" if dh > 0 else f"{dm}{languages.get_text('minute', self.current_lang)}"
                 
-                type_map = {"game": "게임", "countdown": "카운트다운", "schedule": "스케줄"}
+                type_map = {
+                    "game": languages.get_text("type_game", self.current_lang), 
+                    "countdown": languages.get_text("type_countdown", self.current_lang), 
+                    "schedule": languages.get_text("type_schedule", self.current_lang)
+                }
                 type_str = type_map.get(log["type"], log["type"])
                 if log.get("target"):
                     type_str += f" ({log['target']})"
@@ -481,26 +519,30 @@ class GameTimerApp(ctk.CTk):
             }
             utils.save_settings(settings)
             
-            if current_tab == "카운트다운":
+            if current_tab == languages.get_text("tab_countdown", self.current_lang):
                 h = int(self.hour_entry.get() or 0)
                 m = int(self.min_entry.get() or 0)
                 total_seconds = (h * 60 + m) * 60
 
-            elif current_tab == "특정 게임":
+            elif current_tab == languages.get_text("tab_game", self.current_lang):
                 h = int(self.game_hour_entry.get() or 0)
                 m = int(self.game_min_entry.get() or 0)
                 total_seconds = (h * 60 + m) * 60
                 process_name = self.game_name_entry.get()
                 if not process_name:
-                    messagebox.showerror("오류", "게임 이름을 입력해주세요.")
+                    messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("enter_game_name", self.current_lang))
                     return
                 
             else: # 특정 시간
-                target_h = int(self.target_hour_entry.get())
-                target_m = int(self.target_min_entry.get() or 0)
+                target_h_str = self.target_hour_entry.get()
+                # Remove non-digit characters if any (like "시")
+                target_h = int(''.join(filter(str.isdigit, target_h_str)))
+                
+                target_m_str = self.target_min_entry.get() or "0"
+                target_m = int(''.join(filter(str.isdigit, target_m_str)))
                 
                 if not (0 <= target_h <= 23 and 0 <= target_m <= 59):
-                    raise ValueError("올바른 시간을 입력해주세요.")
+                    raise ValueError("Invalid time")
                 
                 now = datetime.now()
                 target = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
@@ -511,15 +553,15 @@ class GameTimerApp(ctk.CTk):
                 total_seconds = int((target - now).total_seconds())
 
         except ValueError:
-            messagebox.showerror("오류", "올바른 시간을 입력해주세요.")
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("enter_valid_time", self.current_lang))
             return
 
         if total_seconds <= 0:
-            messagebox.showerror("오류", "시간을 1분 이상 설정해주세요.")
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("min_time_1min", self.current_lang))
             return
 
         self.initial_duration = total_seconds
-        self.timer_type = "game" if process_name else ("schedule" if current_tab == "특정 시간" else "countdown")
+        self.timer_type = "game" if process_name else ("schedule" if current_tab == languages.get_text("tab_schedule", self.current_lang) else "countdown")
         self.timer_target = process_name
 
         if process_name:
@@ -532,15 +574,15 @@ class GameTimerApp(ctk.CTk):
     def show_timer_screen(self):
         self.clear_container()
         
-        ctk.CTkLabel(self.container, text="남은 시간", font=("Arial", 20)).pack(pady=(40, 10))
+        ctk.CTkLabel(self.container, text=languages.get_text("remaining_time", self.current_lang), font=("Arial", 20)).pack(pady=(40, 10))
         
         self.time_label = ctk.CTkLabel(self.container, text="00:00:00", font=("Arial", 48, "bold"), text_color="#FF5555")
         self.time_label.pack(pady=20)
 
-        ctk.CTkButton(self.container, text="타이머 중지 / 변경", command=self.prompt_stop_timer, fg_color="red").pack(pady=40, fill="x")
+        ctk.CTkButton(self.container, text=languages.get_text("stop_timer", self.current_lang), command=self.prompt_stop_timer, fg_color="red").pack(pady=40, fill="x")
         
         # Mini mode hint
-        ctk.CTkLabel(self.container, text="* 창을 닫아도 타이머는 계속 작동합니다.", font=("Arial", 12), text_color="gray").pack(side="bottom", pady=10)
+        ctk.CTkLabel(self.container, text=languages.get_text("timer_running_note", self.current_lang), font=("Arial", 12), text_color="gray").pack(side="bottom", pady=10)
 
     def update_timer_display(self, time_str):
         self.time_label.configure(text=time_str)
@@ -558,7 +600,8 @@ class GameTimerApp(ctk.CTk):
         self.attributes("-topmost", False)
         
         minutes = remaining_seconds // 60
-        messagebox.showwarning("시간 경고", f"게임 시간이 {minutes}분 남았습니다!")
+        msg = languages.get_text("time_warning", self.current_lang).format(minutes=minutes)
+        messagebox.showwarning(languages.get_text("warning", self.current_lang), msg)
 
     def on_timer_finish(self):
         # Save log
@@ -571,7 +614,7 @@ class GameTimerApp(ctk.CTk):
             system_control.logoff_system()
 
     def prompt_stop_timer(self):
-        dialog = PasswordDialog(self, title="비밀번호 확인", text="비밀번호를 입력하세요:")
+        dialog = PasswordDialog(self, title=languages.get_text("password_confirm", self.current_lang), text=languages.get_text("password_enter", self.current_lang))
         pw = dialog.get_input()
         
         if pw and utils.check_password(pw):
@@ -585,11 +628,11 @@ class GameTimerApp(ctk.CTk):
             self.show_dashboard()
         else:
             if pw is not None: # Cancel returns None
-                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다.")
+                messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("password_mismatch", self.current_lang))
 
     def on_closing(self):
         if self.timer and self.timer.running:
-            if messagebox.askokcancel("종료", "타이머가 작동 중입니다. 정말 종료하시겠습니까?\n(종료하려면 비밀번호가 필요합니다)"):
+            if messagebox.askokcancel(languages.get_text("close", self.current_lang), languages.get_text("timer_running_confirm", self.current_lang)):
                 self.prompt_stop_timer()
         else:
             self.destroy()
