@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmark Manager Dashboard</title>
+    <link rel="stylesheet" href="manager.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Bookmark Manager Dashboard</h1>
+        </header>
+
+        <main>
+            <div class="actions-panel">
+                <div class="card">
+                    <h2>Duplicates</h2>
+                    <p>Find and remove duplicate bookmarks.</p>
+                    <button id="btn-find-duplicates" class="action-btn">Find Duplicates</button>
+                </div>
+
+                <div class="card">
+                    <h2>Empty Folders</h2>
+                    <p>Clean up folders that contain no bookmarks.</p>
+                    <button id="btn-find-empty-folders" class="action-btn">Find Empty Folders</button>
+                </div>
+
+                <div class="card">
+                    <h2>Dead Links</h2>
+                    <p>Check for broken URLs (404, etc). This may take a while.</p>
+                    <button id="btn-check-dead-links" class="action-btn warning">Check Dead Links</button>
+                </div>
+            </div>
+
+            <div id="results-area" class="results-area hidden">
+                <div class="results-header">
+                    <h3 id="results-title">Results</h3>
+                    <div class="results-actions">
+                        <button id="btn-select-all" class="secondary-btn">Select All</button>
+                        <button id="btn-delete-selected" class="danger-btn">Delete Selected</button>
+                        <button id="btn-close-results" class="icon-btn">×</button>
+                    </div>
+                </div>
+                <div id="progress-bar-container" class="hidden">
+                    <div id="progress-bar"></div>
+                    <span id="progress-text">0%</span>
+                </div>
+                <ul id="results-list">
+                    <!-- Items will be injected here -->
+                </ul>
+            </div>
+        </main>
+    </div>
+    <script src="manager.js"></script>
+</body>
+
+</html>
