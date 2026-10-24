@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyInstaller 빌드 결과물 (배포는 GitHub Releases 사용)
+build/
+dist/
+
+# 사용자 데이터 (실제 데이터는 %LOCALAPPDATA%\TimeParents 에 저장됨)
+password.json
+settings.json
+stats.json
+timer_state.json

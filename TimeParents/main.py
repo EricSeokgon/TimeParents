@@ -7,6 +7,8 @@ import sys
 from datetime import datetime, timedelta
 import webbrowser
 import languages
+import stats_window
+from dialogs import WarningDialog, GraceWarningDialog, PasswordDialog, TimePickerDialog
 import pystray
 from PIL import Image, ImageDraw
 import threading
@@ -40,234 +42,15 @@ def create_tray_icon_image():
         # Fallback to a blank image if PIL fails
         return Image.new('RGB', (64, 64), color='blue')
 
-class WarningDialog(ctk.CTkToplevel):
-    """메인 루프를 막지 않는 알림 창 (messagebox는 열어 둔 채 방치하면 타이머 동작이 멈춤)."""
-    def __init__(self, parent, text, title_key="warning", color="#FF5555"):
-        super().__init__(parent)
-
-        self.title(languages.get_text(title_key, parent.current_lang))
-        self.geometry("350x150")
-        self.resizable(False, False)
-        
-        # 화면 최상단 플로팅 설정 (포커스는 뺏지 않음)
-        self.attributes("-topmost", True)
-        self.transient(parent)
-        
-        # 레이블
-        label = ctk.CTkLabel(self, text=text, font=("Arial", 16, "bold"), text_color=color, wraplength=300)
-        label.pack(pady=30, padx=20)
-        
-        # 확인 버튼
-        btn = ctk.CTkButton(self, text=languages.get_text("confirm", parent.current_lang), command=self.destroy, width=100)
-        btn.pack(pady=10)
-        
-        # 10초 후 자동 닫힘
-        self.after(10000, self._auto_close)
-
-    def _auto_close(self):
-        if self.winfo_exists():
-            self.destroy()
-
-
-class GraceWarningDialog(ctk.CTkToplevel):
-    def __init__(self, parent, action, seconds=60):
-        super().__init__(parent)
-        self.parent = parent
-        self.action = action
-        self.remaining = seconds
-        self._timer_id = None
-        
-        self.title(languages.get_text("warning", parent.current_lang))
-        self.geometry("380x180")
-        self.resizable(False, False)
-        self.attributes("-topmost", True)
-        self.transient(parent)
-        
-        # Disable window close button to prevent bypassing/dismissing
-        self.protocol("WM_DELETE_WINDOW", lambda: None)
-        
-        self.label = ctk.CTkLabel(self, text="", font=("Arial", 16, "bold"), text_color="#FF5555", wraplength=340)
-        self.label.pack(pady=40, padx=20)
-        
-        self.update_countdown()
-
-    def update_countdown(self):
-        if self.remaining <= 0:
-            self.execute_action()
-            return
-            
-        action_str = languages.get_text(self.action, self.parent.current_lang)
-        
-        if self.parent.current_lang == "ko":
-            msg = f"⚠️ 시간이 만료되었습니다!\n{self.remaining}초 후에 {action_str}이(가) 실행됩니다.\n작업을 저장하세요!"
-        else:
-            msg = f"⚠️ Time's up!\n{action_str} will execute in {self.remaining} seconds.\nPlease save your work!"
-            
-        self.label.configure(text=msg)
-        self.remaining -= 1
-        self._timer_id = self.after(1000, self.update_countdown)
-
-    def execute_action(self):
-        self._timer_id = None
-        self.parent.grace_dialog = None
-        self.destroy()
-        self.parent.execute_expire_action(self.action)
-
-    def cancel_dialog(self):
-        if self._timer_id:
-            self.after_cancel(self._timer_id)
-            self._timer_id = None
-        self.parent.grace_dialog = None
-        self.destroy()
-
-
-class PasswordDialog(ctk.CTkToplevel):
-    def __init__(self, parent, title=None, text=None):
-        super().__init__(parent)
-        
-        self.lang = utils.load_language()
-        
-        if title is None:
-            title = languages.get_text("password_input", self.lang)
-        if text is None:
-            text = languages.get_text("password_enter", self.lang)
-            
-        self.title(title)
-        self.geometry("300x200")
-        self.resizable(False, False)
-        
-        self.result = None
-        
-        # Center the dialog
-        self.transient(parent)
-        self.grab_set()
-        
-        # Label
-        ctk.CTkLabel(self, text=text).pack(pady=20)
-        
-        # Password entry
-        self.pw_entry = ctk.CTkEntry(self, show="*", width=250)
-        self.pw_entry.pack(pady=10)
-        self.pw_entry.bind("<Return>", lambda e: self.ok_clicked())
-        self.pw_entry.focus()
-        
-        # Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(pady=10)
-        
-        ctk.CTkButton(btn_frame, text=languages.get_text("confirm", self.lang), command=self.ok_clicked, width=100).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text=languages.get_text("cancel", self.lang), command=self.cancel_clicked, width=100).pack(side="left", padx=5)
-    
-    def ok_clicked(self):
-        self.result = self.pw_entry.get()
-        self.destroy()
-    
-    def cancel_clicked(self):
-        self.result = None
-        self.destroy()
-    
-    def get_input(self):
-        self.wait_window()
-        return self.result
-
-class TimePickerDialog(ctk.CTkToplevel):
-    def __init__(self, parent, initial_hour=12, initial_min=0):
-        super().__init__(parent)
-        
-        self.lang = utils.load_language()
-        
-        self.title(languages.get_text("time_picker_title", self.lang))
-        self.geometry("300x350")
-        self.resizable(False, False)
-        
-        self.result = None
-        
-        # Center the dialog
-        self.transient(parent)
-        self.grab_set()
-        
-        # Label
-        ctk.CTkLabel(self, text=languages.get_text("select_end_time", self.lang), font=("Arial", 16, "bold")).pack(pady=20)
-        
-        # Time picker frame
-        time_frame = ctk.CTkFrame(self, fg_color="transparent")
-        time_frame.pack(pady=20)
-        
-        # Hour picker
-        hour_frame = ctk.CTkFrame(time_frame, fg_color="transparent")
-        hour_frame.pack(side="left", padx=20)
-        
-        ctk.CTkLabel(hour_frame, text=languages.get_text("hour", self.lang), font=("Arial", 14)).pack()
-        self.hour_var = ctk.StringVar(value=str(initial_hour))
-        hour_spinbox = ctk.CTkSegmentedButton(hour_frame, values=[str(i) for i in range(24)], 
-                                               variable=self.hour_var, width=100)
-        
-        # Create custom hour selector with buttons
-        self.hour_value = initial_hour
-        self.hour_label = ctk.CTkLabel(hour_frame, text=f"{self.hour_value:02d}", font=("Arial", 32, "bold"))
-        self.hour_label.pack(pady=10)
-        
-        hour_btn_frame = ctk.CTkFrame(hour_frame, fg_color="transparent")
-        hour_btn_frame.pack()
-        ctk.CTkButton(hour_btn_frame, text="▲", width=50, command=self.hour_up).pack()
-        ctk.CTkButton(hour_btn_frame, text="▼", width=50, command=self.hour_down).pack()
-        
-        # Minute picker
-        min_frame = ctk.CTkFrame(time_frame, fg_color="transparent")
-        min_frame.pack(side="left", padx=20)
-        
-        ctk.CTkLabel(min_frame, text=languages.get_text("minute", self.lang), font=("Arial", 14)).pack()
-        self.min_value = initial_min
-        self.min_label = ctk.CTkLabel(min_frame, text=f"{self.min_value:02d}", font=("Arial", 32, "bold"))
-        self.min_label.pack(pady=10)
-        
-        min_btn_frame = ctk.CTkFrame(min_frame, fg_color="transparent")
-        min_btn_frame.pack()
-        ctk.CTkButton(min_btn_frame, text="▲", width=50, command=self.min_up).pack()
-        ctk.CTkButton(min_btn_frame, text="▼", width=50, command=self.min_down).pack()
-        
-        # Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(pady=20)
-        
-        ctk.CTkButton(btn_frame, text=languages.get_text("confirm", self.lang), command=self.ok_clicked, width=100).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text=languages.get_text("cancel", self.lang), command=self.cancel_clicked, width=100).pack(side="left", padx=5)
-    
-    def hour_up(self):
-        self.hour_value = (self.hour_value + 1) % 24
-        self.hour_label.configure(text=f"{self.hour_value:02d}")
-    
-    def hour_down(self):
-        self.hour_value = (self.hour_value - 1) % 24
-        self.hour_label.configure(text=f"{self.hour_value:02d}")
-    
-    def min_up(self):
-        self.min_value = (self.min_value + 1) % 60
-        self.min_label.configure(text=f"{self.min_value:02d}")
-    
-    def min_down(self):
-        self.min_value = (self.min_value - 1) % 60
-        self.min_label.configure(text=f"{self.min_value:02d}")
-    
-    def ok_clicked(self):
-        self.result = (self.hour_value, self.min_value)
-        self.destroy()
-    
-    def cancel_clicked(self):
-        self.result = None
-        self.destroy()
-    
-    def get_input(self):
-        self.wait_window()
-        return self.result
-
 class GameTimerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.current_lang = utils.load_language()
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
-        self.geometry("400x920")
+        # 작은 화면(768p 노트북 등)에서는 창 높이를 줄이고 내용은 스크롤로 봅니다.
+        height = min(920, self.winfo_screenheight() - 100)
+        self.geometry(f"420x{height}")
         self.resizable(False, True)
 
         self.timer = None
@@ -283,7 +66,7 @@ class GameTimerApp(ctk.CTk):
         self.timer_exact = True
         self.initial_duration = 0
 
-        self.container = ctk.CTkFrame(self)
+        self.container = ctk.CTkScrollableFrame(self)
         self.container.pack(fill="both", expand=True, padx=20, pady=20)
 
         self.tray_icon = None
@@ -440,7 +223,7 @@ class GameTimerApp(ctk.CTk):
         schedule_frame = ctk.CTkFrame(self.tab_schedule, fg_color="transparent")
         schedule_frame.pack(pady=20)
         
-        self.target_hour_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="24" + languages.get_text("hour", self.current_lang))
+        self.target_hour_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="22")
         self.target_hour_entry.pack(side="left", padx=5)
         ctk.CTkLabel(schedule_frame, text=languages.get_text("hour", self.current_lang)).pack(side="left")
         
@@ -514,8 +297,7 @@ class GameTimerApp(ctk.CTk):
         # 오늘 남은 허용 시간 표시
         daily_remaining = utils.get_daily_remaining()
         if daily_remaining >= 0:
-            rh, rm = divmod(daily_remaining // 60, 60)
-            remaining_str = f"{rh}{languages.get_text('hour', self.current_lang)} {rm}{languages.get_text('minute', self.current_lang)}"
+            remaining_str = languages.format_hm(daily_remaining, self.current_lang)
             self.daily_remaining_label = ctk.CTkLabel(daily_frame,
                 text=languages.get_text("daily_remaining", self.current_lang).format(time=remaining_str),
                 font=("Arial", 12), text_color="#3B8ED0")
@@ -702,242 +484,7 @@ class GameTimerApp(ctk.CTk):
             self.target_min_entry.insert(0, str(minute))
 
     def show_statistics(self):
-        stats_window = ctk.CTkToplevel(self)
-        stats_window.title(languages.get_text("stats_title", self.current_lang))
-        stats_window.geometry("400x700")
-        
-        # Center
-        stats_window.transient(self)
-        stats_window.grab_set()
-        
-        # Create TabView
-        tabview = ctk.CTkTabview(stats_window)
-        tabview.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        weekly_tab = tabview.add(languages.get_text("weekly_stats", self.current_lang))
-        search_tab = tabview.add(languages.get_text("search_tab", self.current_lang))
-        
-        # --- 1. WEEKLY STATS TAB ---
-        # Today's Total
-        today_seconds = utils.get_today_total()
-        h, m = divmod(today_seconds // 60, 60)
-        today_str = f"{h}{languages.get_text('hour', self.current_lang)} {m}{languages.get_text('minute', self.current_lang)}"
-        
-        ctk.CTkLabel(weekly_tab, text=languages.get_text("today_total", self.current_lang), font=("Arial", 14, "bold")).pack(pady=(10, 2))
-        ctk.CTkLabel(weekly_tab, text=today_str, font=("Arial", 20, "bold"), text_color="#3B8ED0").pack(pady=(0, 10))
-        
-        # Weekly column chart container
-        weekly_frame = ctk.CTkFrame(weekly_tab, height=185, fg_color=("#E2E8F0", "#1E293B"))
-        weekly_frame.pack(pady=5, padx=10, fill="x")
-        weekly_frame.pack_propagate(False)
-        
-        weekly_data = utils.get_weekly_stats()
-        max_seconds = max([s for _, s in weekly_data]) if any(s for _, s in weekly_data) else 1
-        weekly_total_seconds = sum([s for _, s in weekly_data])
-        
-        day_keys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        current_weekday = datetime.now().weekday()
-        
-        for i, (day_name, seconds) in enumerate(weekly_data):
-            col_frame = ctk.CTkFrame(weekly_frame, fg_color="transparent", width=46)
-            col_frame.pack(side="left", padx=2, fill="y", expand=True)
-            col_frame.pack_propagate(False)
-            
-            # Time text (top)
-            h, m = divmod(seconds // 60, 60)
-            if seconds > 0:
-                time_str = f"{h}h\n{m}m" if h > 0 else f"{m}m"
-            else:
-                time_str = ""
-            time_label = ctk.CTkLabel(col_frame, text=time_str, font=("Arial", 10), height=30, text_color="gray")
-            time_label.pack(side="top", fill="x")
-            
-            # Day label (bottom)
-            translated_day = languages.get_text(day_keys[i], self.current_lang)
-            if self.current_lang == "en":
-                day_abbreviations = ["M", "T", "W", "Th", "F", "S", "Su"]
-                day_text = day_abbreviations[i]
-            else:
-                day_text = translated_day[0]
-                
-            is_today = (i == current_weekday)
-            
-            day_label = ctk.CTkLabel(
-                col_frame, 
-                text=day_text, 
-                font=("Arial", 11, "bold" if is_today else "normal"),
-                text_color=("#10B981" if is_today else "#1E293B", "#10B981" if is_today else "#94A3B8")
-            )
-            day_label.pack(side="bottom", fill="x", pady=2)
-            
-            # Vertical bar (middle, anchored to bottom)
-            max_bar_height = 100
-            bar_height = int((seconds / max_seconds) * max_bar_height) if max_seconds > 0 else 0
-            if seconds > 0 and bar_height < 6:
-                bar_height = 6
-                
-            bar_container = ctk.CTkFrame(col_frame, fg_color="transparent")
-            bar_container.pack(side="bottom", fill="both", expand=True)
-            
-            if is_today:
-                bar_color = ("#10B981", "#10B981")
-            else:
-                bar_color = ("#3B8ED0", "#1F538D")
-                
-            bar = ctk.CTkFrame(bar_container, width=16, height=bar_height, corner_radius=4, fg_color=bar_color)
-            bar.pack(side="bottom", pady=(0, 2))
-            bar.pack_propagate(False)
-            
-        # Weekly Total and Average Summary
-        th, tm = divmod(weekly_total_seconds // 60, 60)
-        weekly_total_str = f"{th}{languages.get_text('hour', self.current_lang)} {tm}{languages.get_text('minute', self.current_lang)}"
-        avg_seconds = weekly_total_seconds // 7
-        ah, am = divmod(avg_seconds // 60, 60)
-        weekly_avg_str = f"{ah}{languages.get_text('hour', self.current_lang)} {am}{languages.get_text('minute', self.current_lang)}"
-        
-        summary_text = f"{languages.get_text('weekly_total', self.current_lang)}: {weekly_total_str}   |   {languages.get_text('daily_average', self.current_lang)}: {weekly_avg_str}"
-        ctk.CTkLabel(weekly_tab, text=summary_text, font=("Arial", 12, "bold"), text_color="#3B8ED0").pack(pady=10)
-        
-        # Recent logs list inside Weekly Tab
-        ctk.CTkLabel(weekly_tab, text=languages.get_text("recent_logs", self.current_lang), font=("Arial", 12, "bold")).pack(pady=(10, 2), anchor="w", padx=10)
-        scroll_frame = ctk.CTkScrollableFrame(weekly_tab, width=340, height=180)
-        scroll_frame.pack(pady=5, padx=10, fill="both", expand=True)
-        
-        logs = utils.load_logs()
-        if not logs:
-            ctk.CTkLabel(scroll_frame, text=languages.get_text("no_logs", self.current_lang)).pack(pady=20)
-        else:
-            for log in reversed(logs):
-                frame = ctk.CTkFrame(scroll_frame)
-                frame.pack(fill="x", pady=2)
-                
-                ts = log["timestamp"][5:-3] # MM-DD HH:MM
-                duration = log["duration"]
-                dh, dm = divmod(duration // 60, 60)
-                dur_str = f"{dh}{languages.get_text('hour', self.current_lang)} {dm}{languages.get_text('minute', self.current_lang)}" if dh > 0 else f"{dm}{languages.get_text('minute', self.current_lang)}"
-                
-                type_map = {
-                    "game": languages.get_text("type_game", self.current_lang), 
-                    "countdown": languages.get_text("type_countdown", self.current_lang), 
-                    "schedule": languages.get_text("type_schedule", self.current_lang),
-                    "tamper": languages.get_text("type_tamper", self.current_lang)
-                }
-                type_str = type_map.get(log["type"], log["type"])
-                if log.get("target"):
-                    type_str += f" ({log['target']})"
-                
-                ctk.CTkLabel(frame, text=ts, width=80, anchor="w").pack(side="left", padx=5)
-                ctk.CTkLabel(frame, text=type_str, anchor="w").pack(side="left", padx=5, expand=True, fill="x")
-                ctk.CTkLabel(frame, text=dur_str, width=60, anchor="e").pack(side="right", padx=5)
-                
-        # --- 2. SEARCH TAB ---
-        # Filters Frame
-        filter_frame = ctk.CTkFrame(search_tab)
-        filter_frame.pack(pady=10, padx=10, fill="x")
-        
-        # Year combobox
-        current_year = datetime.now().year
-        years = [str(current_year - 1), str(current_year), str(current_year + 1)]
-        year_var = ctk.StringVar(value=str(current_year))
-        year_menu = ctk.CTkOptionMenu(filter_frame, variable=year_var, values=years, width=80)
-        year_menu.pack(side="left", padx=5, pady=5)
-        
-        # Month combobox
-        current_month = f"{datetime.now().month:02d}"
-        months = [f"{i:02d}" for i in range(1, 13)]
-        month_var = ctk.StringVar(value=current_month)
-        month_menu = ctk.CTkOptionMenu(filter_frame, variable=month_var, values=months, width=60)
-        month_menu.pack(side="left", padx=5, pady=5)
-        
-        # Day combobox (All / specific day)
-        all_translated = languages.get_text("all", self.current_lang)
-        days = [all_translated] + [f"{i:02d}" for i in range(1, 32)]
-        day_var = ctk.StringVar(value=all_translated)
-        day_menu = ctk.CTkOptionMenu(filter_frame, variable=day_var, values=days, width=80)
-        day_menu.pack(side="left", padx=5, pady=5)
-        
-        # Results area
-        result_frame = ctk.CTkFrame(search_tab, fg_color="transparent")
-        result_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        
-        def perform_search():
-            import calendar
-            
-            # Clear previous result widgets
-            for widget in result_frame.winfo_children():
-                widget.destroy()
-                
-            y = year_var.get()
-            m = month_var.get()
-            d = day_var.get()
-            
-            search_logs = utils.load_logs()
-            filtered_logs = []
-            
-            if d == all_translated or d == "All" or d == "전체":
-                prefix = f"{y}-{m}-"
-                is_month_search = True
-            else:
-                prefix = f"{y}-{m}-{d}"
-                is_month_search = False
-                
-            total_seconds = 0
-            for log in search_logs:
-                if log["timestamp"].startswith(prefix):
-                    filtered_logs.append(log)
-                    total_seconds += log.get("duration", 0)
-                    
-            th, tm = divmod(total_seconds // 60, 60)
-            total_str = f"{th}{languages.get_text('hour', self.current_lang)} {tm}{languages.get_text('minute', self.current_lang)}"
-            summary_str = f"{languages.get_text('search_total', self.current_lang)}: {total_str}"
-            
-            if is_month_search:
-                try:
-                    num_days = calendar.monthrange(int(y), int(m))[1]
-                except:
-                    num_days = 30
-                avg_sec = total_seconds // num_days
-                ah, am = divmod(avg_sec // 60, 60)
-                avg_str = f"{ah}{languages.get_text('hour', self.current_lang)} {am}{languages.get_text('minute', self.current_lang)}"
-                summary_str += f"\n({languages.get_text('daily_average', self.current_lang)}: {avg_str})"
-                
-            ctk.CTkLabel(result_frame, text=summary_str, font=("Arial", 13, "bold"), text_color="#3B8ED0").pack(pady=10)
-            
-            scroll_search = ctk.CTkScrollableFrame(result_frame, width=340, height=300)
-            scroll_search.pack(fill="both", expand=True, padx=5, pady=5)
-            
-            if not filtered_logs:
-                ctk.CTkLabel(scroll_search, text=languages.get_text("no_logs", self.current_lang)).pack(pady=20)
-            else:
-                for log in reversed(filtered_logs):
-                    frame = ctk.CTkFrame(scroll_search)
-                    frame.pack(fill="x", pady=2)
-                    
-                    ts = log["timestamp"][5:-3] # MM-DD HH:MM
-                    duration = log["duration"]
-                    dh, dm = divmod(duration // 60, 60)
-                    dur_str = f"{dh}{languages.get_text('hour', self.current_lang)} {dm}{languages.get_text('minute', self.current_lang)}" if dh > 0 else f"{dm}{languages.get_text('minute', self.current_lang)}"
-                    
-                    type_map = {
-                        "game": languages.get_text("type_game", self.current_lang), 
-                        "countdown": languages.get_text("type_countdown", self.current_lang), 
-                        "schedule": languages.get_text("type_schedule", self.current_lang),
-                        "tamper": languages.get_text("type_tamper", self.current_lang)
-                    }
-                    type_str = type_map.get(log["type"], log["type"])
-                    if log.get("target"):
-                        type_str += f" ({log['target']})"
-                    
-                    ctk.CTkLabel(frame, text=ts, width=80, anchor="w").pack(side="left", padx=5)
-                    ctk.CTkLabel(frame, text=type_str, anchor="w").pack(side="left", padx=5, expand=True, fill="x")
-                    ctk.CTkLabel(frame, text=dur_str, width=60, anchor="e").pack(side="right", padx=5)
-                    
-        # Search button
-        search_btn = ctk.CTkButton(filter_frame, text=languages.get_text("search", self.current_lang), width=60, command=perform_search)
-        search_btn.pack(side="left", padx=5, pady=5)
-        
-        # Trigger initial search for the current month
-        perform_search()
+        stats_window.open_statistics(self)
 
     def start_timer(self):
         total_seconds = 0
@@ -1052,8 +599,7 @@ class GameTimerApp(ctk.CTk):
         elif daily_remaining > 0 and total_seconds > daily_remaining:
             # 일일 제한에 맞게 조정
             total_seconds = daily_remaining
-            rh, rm = divmod(total_seconds // 60, 60)
-            cap_str = f"{rh}{languages.get_text('hour', self.current_lang)} {rm}{languages.get_text('minute', self.current_lang)}"
+            cap_str = languages.format_hm(total_seconds, self.current_lang)
             messagebox.showinfo(
                 languages.get_text("daily_limit", self.current_lang),
                 languages.get_text("daily_limit_capped", self.current_lang).format(time=cap_str)

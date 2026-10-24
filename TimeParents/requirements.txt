@@ -1,0 +1,6 @@
+customtkinter==5.2.2
+pystray==0.19.5
+Pillow==12.0.0
+
+# 빌드용
+pyinstaller==6.17.0

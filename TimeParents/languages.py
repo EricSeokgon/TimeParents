@@ -29,6 +29,8 @@ LANGUAGES = {
         "minutes": "분",
         "hour": "시",
         "minute": "분",
+        "dur_hour": "시간",
+        "dur_minute": "분",
         "game_process_name": "게임 프로세스 이름",
         "process_name_placeholder": "프로세스 이름 (예: Roblox)",
         "schedule_note": "* 입력한 시간에 종료됩니다.",
@@ -136,6 +138,7 @@ LANGUAGES = {
         "tamper_detected": "⚠️ 비밀번호 파일이 삭제된 것이 감지되었습니다.\n통계에 기록이 남았습니다. 비밀번호를 다시 설정하세요.",
         "shutdown_reason": "TimeParents: 시간이 만료되었습니다. 60초 후에 시스템이 종료됩니다.",
         "type_tamper": "⚠️ 변조 감지",
+        "grace_countdown": "⚠️ 시간이 만료되었습니다!\n{seconds}초 후에 {action}이(가) 실행됩니다.\n작업을 저장하세요!",
     },
     
     "en": {
@@ -166,6 +169,8 @@ LANGUAGES = {
         "minutes": "Minutes",
         "hour": "h",
         "minute": "m",
+        "dur_hour": "h",
+        "dur_minute": "m",
         "game_process_name": "Game Process Name",
         "process_name_placeholder": "Process name (e.g., Roblox)",
         "schedule_note": "* Will shut down at the specified time.",
@@ -273,12 +278,21 @@ LANGUAGES = {
         "tamper_detected": "⚠️ The password file was deleted.\nThis has been recorded in the statistics. Please set the password again.",
         "shutdown_reason": "TimeParents: Time is up. The system will shut down in 60 seconds.",
         "type_tamper": "⚠️ Tampering detected",
+        "grace_countdown": "⚠️ Time's up!\n{action} will execute in {seconds} seconds.\nPlease save your work!",
     }
 }
 
 def get_text(key, lang="ko"):
     """Get translated text for the given key and language"""
     return LANGUAGES.get(lang, LANGUAGES["ko"]).get(key, key)
+
+def format_hm(seconds, lang="ko", compact=False):
+    """초를 'X시간 Y분' 형식으로 변환합니다. compact=True면 0시간일 때 분만 표시합니다."""
+    h, m = divmod(int(seconds) // 60, 60)
+    hour, minute = get_text("dur_hour", lang), get_text("dur_minute", lang)
+    if compact and h == 0:
+        return f"{m}{minute}"
+    return f"{h}{hour} {m}{minute}"
 
 def get_all_languages():
     """Return list of available languages"""
