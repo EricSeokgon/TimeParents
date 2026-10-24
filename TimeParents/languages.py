@@ -143,6 +143,12 @@ LANGUAGES = {
         "daily_limit_exceeded": "오늘의 일일 제한 시간을 이미 초과했습니다.",
         "daily_limit_capped": "일일 제한에 맞게 타이머가 {time}(으)로 조정되었습니다.",
         "no_limit": "제한 없음",
+        "settings": "설정",
+        "back": "뒤로",
+        "general": "일반",
+        "limit_saved": "사용 제한이 저장되었습니다.",
+        "status_no_limit": "오늘 사용 제한 없음",
+        "status_curfew": "사용 금지 {start} ~ {end}",
         
         # Grace Period & Auto-Resume
         "grace_period_warning_shutdown": "⚠️ 시간이 만료되었습니다!\n60초 후에 시스템이 종료됩니다.\n작업을 저장하세요!",
@@ -299,6 +305,12 @@ LANGUAGES = {
         "daily_limit_exceeded": "Today's daily limit has already been exceeded.",
         "daily_limit_capped": "Timer has been adjusted to {time} to match the daily limit.",
         "no_limit": "No Limit",
+        "settings": "Settings",
+        "back": "Back",
+        "general": "General",
+        "limit_saved": "Usage limits have been saved.",
+        "status_no_limit": "No daily limit today",
+        "status_curfew": "Blocked {start} ~ {end}",
         
         # Grace Period & Auto-Resume
         "grace_period_warning_shutdown": "⚠️ Time's up!\nSystem will shut down in 60 seconds.\nPlease save your work!",

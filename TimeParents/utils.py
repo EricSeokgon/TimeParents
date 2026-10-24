@@ -20,6 +20,14 @@ def get_data_dir():
 
 DATA_DIR = get_data_dir()
 
+def resource_path(relative):
+    """번들 리소스 경로. PyInstaller exe에서는 압축이 풀린 임시 폴더를 기준으로 합니다."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative)
+
+ICON_ICO = resource_path(os.path.join("assets", "icon.ico"))
+ICON_PNG = resource_path(os.path.join("assets", "icon.png"))
+
 def migrate_file(old_name, new_path):
     """기존 로컬에 있던 파일을 보안 폴더로 마이그레이션하고 기존 파일을 삭제합니다."""
     if os.path.exists(old_name) and not os.path.exists(new_path):

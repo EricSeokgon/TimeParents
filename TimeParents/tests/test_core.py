@@ -434,27 +434,50 @@ class ResumeTests(unittest.TestCase):
 
     def test_limit_change_needs_password_and_is_not_overwritten(self):
         self.main.messagebox.showinfo = lambda *a, **k: None
+        original = self.main.WarningDialog
+        self.main.WarningDialog = lambda *a, **k: None
+        self.addCleanup(setattr, self.main, "WarningDialog", original)
         utils.save_daily_limit(3600)
         utils.save_weekend_limit(3 * 3600)
-        app = self.main.GameTimerApp()
-        app.withdraw()
-        self.addCleanup(self._close, app)
-        app.tab_view.set(languages.get_text("tab_countdown", app.current_lang))
-        app.min_entry.insert(0, "10")
+        app = self._plain_app()
+        app.show_settings()
         app.daily_h_entry.delete(0, "end")
         app.daily_h_entry.insert(0, "2")
         app.weekend_h_entry.delete(0, "end")
         app.weekend_h_entry.insert(0, "8")
 
         app._verify_password = lambda: False
-        app.start_timer()
-        self.assertIsNone(app.timer)
+        app._on_limit_save()  # 설정 화면의 "저장": 비밀번호가 틀리면 그대로
         self.assertEqual((utils.load_daily_limit(), utils.load_weekend_limit()), (3600, 3 * 3600))
 
         app._verify_password = lambda: True
+        app._on_limit_save()  # 두 값을 바꿔도 비밀번호는 한 번만
+        self.assertEqual((utils.load_daily_limit(), utils.load_weekend_limit()), (2 * 3600, 8 * 3600))
+
+        # 타이머 시작은 제한 값을 다시 저장하지 않으므로 덮어쓰지 않음
+        app.show_dashboard()
+        app.tab_view.set(languages.get_text("tab_countdown", app.current_lang))
+        app.min_entry.insert(0, "10")
+        app._verify_password = lambda: self.fail("starting a timer should not ask for the password")
         app.start_timer()
         self.assertIsNotNone(app.timer)
         self.assertEqual((utils.load_daily_limit(), utils.load_weekend_limit()), (2 * 3600, 8 * 3600))
+
+    def test_action_menu_maps_to_saved_action(self):
+        utils.save_settings(dict(utils.load_settings(), action="lock"))
+        app = self._plain_app()
+        self.assertEqual(app.action_menu.get(), languages.get_text("lock", app.current_lang))
+        app._on_action_selected(languages.get_text("kill_game_option", app.current_lang))
+        self.assertEqual(app.action_var.get(), "kill_game")
+        app.min_entry.insert(0, "25")
+        app._open_settings()  # 설정 화면에 다녀와도 입력·선택이 유지됨
+        app.show_dashboard()
+        self.assertEqual(app.action_menu.get(), languages.get_text("kill_game_option", app.current_lang))
+        self.assertEqual(app.min_entry.get(), "25")
+
+    def test_icon_files_are_bundled(self):
+        self.assertTrue(os.path.exists(utils.ICON_ICO))
+        self.assertEqual(self.main.create_tray_icon_image().size, (64, 64))
 
     def test_kill_game_blocks_until_password_stop_and_survives_restart(self):
         killed = []
