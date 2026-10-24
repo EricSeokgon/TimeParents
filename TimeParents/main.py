@@ -284,24 +284,16 @@ class GameTimerApp(ctk.CTk):
         ctk.CTkCheckBox(daily_frame, text=languages.get_text("daily_limit_enable", self.current_lang),
                         variable=self.daily_limit_var, command=self._on_daily_limit_toggled).pack(pady=2)
 
-        daily_time_frame = ctk.CTkFrame(daily_frame, fg_color="transparent")
-        daily_time_frame.pack(pady=5)
+        weekend_limit = utils.load_weekend_limit()
+        self.weekday_label, self.daily_h_entry, self.daily_m_entry = self._make_limit_row(daily_frame, utils.load_daily_limit())
 
-        saved_limit = utils.load_daily_limit()
-        saved_h = saved_limit // 3600 if saved_limit > 0 else 0
-        saved_m = (saved_limit % 3600) // 60 if saved_limit > 0 else 0
-
-        self.daily_h_entry = ctk.CTkEntry(daily_time_frame, width=50, placeholder_text="0")
-        self.daily_h_entry.pack(side="left", padx=3)
-        if saved_h > 0:
-            self.daily_h_entry.insert(0, str(saved_h))
-        ctk.CTkLabel(daily_time_frame, text=languages.get_text("daily_limit_hours", self.current_lang)).pack(side="left")
-
-        self.daily_m_entry = ctk.CTkEntry(daily_time_frame, width=50, placeholder_text="0")
-        self.daily_m_entry.pack(side="left", padx=3)
-        if saved_m > 0:
-            self.daily_m_entry.insert(0, str(saved_m))
-        ctk.CTkLabel(daily_time_frame, text=languages.get_text("daily_limit_minutes", self.current_lang)).pack(side="left")
+        # 주말(토·일) 별도 제한
+        self.weekend_var = ctk.BooleanVar(value=weekend_limit > 0)
+        self.weekend_checkbox = ctk.CTkCheckBox(daily_frame, text=languages.get_text("weekend_separate", self.current_lang),
+                                                variable=self.weekend_var, command=self._on_weekend_toggled)
+        self.weekend_checkbox.pack(pady=2)
+        self.weekend_label, self.weekend_h_entry, self.weekend_m_entry = self._make_limit_row(daily_frame, weekend_limit)
+        self.weekend_label.configure(text=languages.get_text("weekend", self.current_lang))
 
         # 오늘 남은 허용 시간 표시
         daily_remaining = utils.get_daily_remaining()
@@ -349,11 +341,36 @@ class GameTimerApp(ctk.CTk):
 
         self.load_saved_settings()
 
+    def _make_limit_row(self, parent, seconds):
+        """[라벨] [시간] 시간 [분] 분 형태의 입력 줄을 만들고 (라벨, 시간 입력, 분 입력)을 반환합니다."""
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(pady=3)
+        label = ctk.CTkLabel(row, text="", width=40)
+        label.pack(side="left", padx=(0, 5))
+        h, m = divmod(seconds // 60, 60) if seconds > 0 else (0, 0)
+        entries = []
+        for value, unit_key in ((h, "daily_limit_hours"), (m, "daily_limit_minutes")):
+            entry = ctk.CTkEntry(row, width=50, placeholder_text="0")
+            entry.pack(side="left", padx=3)
+            if value > 0:
+                entry.insert(0, str(value))
+            ctk.CTkLabel(row, text=languages.get_text(unit_key, self.current_lang)).pack(side="left")
+            entries.append(entry)
+        return label, entries[0], entries[1]
+
     def _apply_daily_limit_state(self):
-        """일일 제한 체크박스 상태에 따라 입력 필드를 활성화/비활성화합니다."""
-        state = "normal" if self.daily_limit_var.get() else "disabled"
+        """일일 제한/주말 체크박스 상태에 따라 입력 필드를 활성화/비활성화합니다."""
+        enabled = self.daily_limit_var.get()
+        weekend = enabled and self.weekend_var.get()
+        state = "normal" if enabled else "disabled"
         self.daily_h_entry.configure(state=state)
         self.daily_m_entry.configure(state=state)
+        self.weekend_checkbox.configure(state=state)
+        weekend_state = "normal" if weekend else "disabled"
+        self.weekend_h_entry.configure(state=weekend_state)
+        self.weekend_m_entry.configure(state=weekend_state)
+        # 주말을 따로 설정할 때만 첫 줄에 '평일' 표시
+        self.weekday_label.configure(text=languages.get_text("weekday", self.current_lang) if weekend else "")
 
     def _verify_password(self):
         """비밀번호를 물어 맞으면 True. 틀리면 오류를 표시합니다."""
@@ -365,10 +382,31 @@ class GameTimerApp(ctk.CTk):
             WarningDialog(self, languages.get_text("password_incorrect", self.current_lang), title_key="error")
         return False
 
-    def _read_daily_limit_entries(self):
-        h = int(self.daily_h_entry.get() or 0)
-        m = int(self.daily_m_entry.get() or 0)
+    @staticmethod
+    def _read_limit_entries(h_entry, m_entry):
+        h = int(h_entry.get() or 0)
+        m = int(m_entry.get() or 0)
         return (h * 3600) + (m * 60)
+
+    def _read_daily_limit_entries(self):
+        return self._read_limit_entries(self.daily_h_entry, self.daily_m_entry)
+
+    def _on_weekend_toggled(self):
+        """주말 별도 제한 켜기/끄기도 비밀번호 확인 후에만 저장합니다."""
+        enabled = self.weekend_var.get()
+        if not self._verify_password():
+            self.weekend_var.set(not enabled)
+            return
+        self._apply_daily_limit_state()
+        if enabled:
+            try:
+                total = self._read_limit_entries(self.weekend_h_entry, self.weekend_m_entry)
+                if total > 0:
+                    utils.save_weekend_limit(total)
+            except ValueError:
+                pass
+        else:
+            utils.save_weekend_limit(0)
 
     def _on_daily_limit_toggled(self):
         """일일 제한 켜기/끄기는 비밀번호 확인 후에만 저장합니다."""
@@ -574,13 +612,20 @@ class GameTimerApp(ctk.CTk):
                 total_seconds = int((target - now).total_seconds())
                 end_at = target.timestamp()
 
-            # 일일 제한 값을 바꿨다면 비밀번호 확인 후 저장
+            # 일일/주말 제한 값을 바꿨다면 비밀번호 한 번 확인 후 저장
             if self.daily_limit_var.get():
+                changes = []
                 limit_seconds = self._read_daily_limit_entries()
                 if limit_seconds > 0 and limit_seconds != utils.load_daily_limit():
-                    if not self._verify_password():
-                        return
-                    utils.save_daily_limit(limit_seconds)
+                    changes.append((utils.save_daily_limit, limit_seconds))
+                if self.weekend_var.get():
+                    weekend_seconds = self._read_limit_entries(self.weekend_h_entry, self.weekend_m_entry)
+                    if weekend_seconds > 0 and weekend_seconds != utils.load_weekend_limit():
+                        changes.append((utils.save_weekend_limit, weekend_seconds))
+                if changes and not self._verify_password():
+                    return
+            else:
+                changes = []
 
             # Clear paused keys from the saved dictionary
             for key in ("paused_remaining", "paused_type", "paused_date", "last_tab"):
@@ -589,6 +634,10 @@ class GameTimerApp(ctk.CTk):
             # Merge and save
             saved_settings.update(settings)
             utils.save_settings(saved_settings)
+
+            # 제한 시간은 위에서 저장한 설정을 덮어쓰지 않도록 마지막에 저장
+            for save, seconds in changes:
+                save(seconds)
 
         except ValueError:
             messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("enter_valid_time", self.current_lang))

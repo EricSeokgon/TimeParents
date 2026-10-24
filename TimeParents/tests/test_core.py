@@ -81,6 +81,25 @@ class LogTests(unittest.TestCase):
         self.assertEqual(utils.get_today_total(usage_only=True), 600)
         self.assertEqual(utils.get_today_total(), 4200)
 
+    def test_weekend_limit(self):
+        saturday = datetime(2026, 10, 24)
+        monday = datetime(2026, 10, 26)
+        self.assertEqual(utils.get_limit_for_date(saturday), 0)  # 일일 제한 꺼짐
+        utils.save_daily_limit(3600)
+        self.assertEqual(utils.get_limit_for_date(saturday), 3600)  # 주말 별도 설정 없음 → 평일과 같음
+        utils.save_weekend_limit(3 * 3600)
+        self.assertEqual(utils.get_limit_for_date(saturday), 3 * 3600)
+        self.assertEqual(utils.get_limit_for_date(monday), 3600)
+        utils.save_daily_limit(0)
+        self.assertEqual(utils.get_limit_for_date(saturday), 0)  # 일일 제한을 끄면 주말도 해제
+
+    def test_daily_remaining_uses_todays_limit(self):
+        utils.save_daily_limit(3600)
+        utils.save_weekend_limit(7200)
+        utils.save_log(600, "countdown")
+        expected = (7200 if datetime.now().weekday() >= 5 else 3600) - 600
+        self.assertEqual(utils.get_daily_remaining(), expected)
+
     def test_old_logs_pruned_by_age(self):
         utils.save_log(5, "countdown", timestamp=datetime.now() - timedelta(days=800))
         utils.save_log(1, "countdown")
@@ -248,6 +267,30 @@ class ResumeTests(unittest.TestCase):
         self.assertTrue(app._is_enforcing())
         app._stop_timer()
         self.assertFalse(app._is_enforcing())
+
+    def test_limit_change_needs_password_and_is_not_overwritten(self):
+        self.main.messagebox.showinfo = lambda *a, **k: None
+        utils.save_daily_limit(3600)
+        utils.save_weekend_limit(3 * 3600)
+        app = self.main.GameTimerApp()
+        app.withdraw()
+        self.addCleanup(self._close, app)
+        app.tab_view.set(languages.get_text("tab_countdown", app.current_lang))
+        app.min_entry.insert(0, "10")
+        app.daily_h_entry.delete(0, "end")
+        app.daily_h_entry.insert(0, "2")
+        app.weekend_h_entry.delete(0, "end")
+        app.weekend_h_entry.insert(0, "8")
+
+        app._verify_password = lambda: False
+        app.start_timer()
+        self.assertIsNone(app.timer)
+        self.assertEqual((utils.load_daily_limit(), utils.load_weekend_limit()), (3600, 3 * 3600))
+
+        app._verify_password = lambda: True
+        app.start_timer()
+        self.assertIsNotNone(app.timer)
+        self.assertEqual((utils.load_daily_limit(), utils.load_weekend_limit()), (2 * 3600, 8 * 3600))
 
     def test_kill_game_blocks_until_password_stop_and_survives_restart(self):
         killed = []

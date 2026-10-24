@@ -313,9 +313,30 @@ def load_daily_limit():
     settings = load_settings()
     return settings.get("daily_limit", 0)
 
+def save_weekend_limit(seconds):
+    """주말(토·일) 제한 시간을 저장합니다 (초 단위). 0이면 평일과 같은 제한 사용."""
+    settings = load_settings()
+    settings["daily_limit_weekend"] = seconds
+    save_settings(settings)
+
+def load_weekend_limit():
+    """주말 제한 시간을 불러옵니다 (초 단위). 0이면 평일과 같은 제한 사용."""
+    return load_settings().get("daily_limit_weekend", 0)
+
+def get_limit_for_date(day=None):
+    """해당 날짜에 적용되는 제한 시간(초). 일일 제한이 꺼져 있으면 0."""
+    base = load_daily_limit()
+    if base <= 0:
+        return 0
+    day = day or datetime.now()
+    weekend = load_weekend_limit()
+    if day.weekday() >= 5 and weekend > 0:
+        return weekend
+    return base
+
 def get_daily_remaining():
     """오늘 남은 허용 시간을 초 단위로 반환합니다. 제한 없으면 -1."""
-    limit = load_daily_limit()
+    limit = get_limit_for_date()
     if limit <= 0:
         return -1
     used = get_today_total(usage_only=True)
