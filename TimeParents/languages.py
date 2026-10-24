@@ -38,9 +38,12 @@ LANGUAGES = {
         "action_after_time": "시간 종료 후 동작",
         "shutdown": "시스템 종료",
         "logoff": "로그오프",
+        "lock": "화면 잠금",
         "start_timer": "타이머 시작",
         "stop_timer": "타이머 중지 / 변경",
         "timer_running_note": "* 창을 닫아도 타이머는 계속 작동합니다.",
+        "restore": "창 열기",
+        "tray_running_msg": "TimeParents가 백그라운드(시스템 트레이)에서 계속 작동 중입니다.",
         
         # Buttons
         "about": "만든이 소개",
@@ -84,6 +87,12 @@ LANGUAGES = {
         "weekly_stats": "이번 주 사용 통계",
         "recent_logs": "최근 사용 기록",
         "no_logs": "기록이 없습니다.",
+        "daily_average": "일평균 사용 시간",
+        "weekly_total": "이번 주 총 사용",
+        "search_total": "검색 기간 총 사용",
+        "search_tab": "기록 검색",
+        "all": "전체",
+        "search": "검색",
         "monday": "월요일",
         "tuesday": "화요일",
         "wednesday": "수요일",
@@ -106,6 +115,27 @@ LANGUAGES = {
         "theme": "테마",
         "dark_mode": "다크 모드",
         "light_mode": "라이트 모드",
+        
+        # Daily Limit
+        "daily_limit": "일일 사용 제한",
+        "daily_limit_hours": "시간",
+        "daily_limit_minutes": "분",
+        "daily_limit_enable": "일일 제한 활성화",
+        "daily_remaining": "오늘 남은 허용 시간: {time}",
+        "daily_limit_exceeded": "오늘의 일일 제한 시간을 이미 초과했습니다.",
+        "daily_limit_capped": "일일 제한에 맞게 타이머가 {time}(으)로 조정되었습니다.",
+        "no_limit": "제한 없음",
+        
+        # Grace Period & Auto-Resume
+        "grace_period_warning_shutdown": "⚠️ 시간이 만료되었습니다!\n60초 후에 시스템이 종료됩니다.\n작업을 저장하세요!",
+        "grace_period_warning_logoff": "⚠️ 시간이 만료되었습니다!\n60초 후에 로그오프됩니다.\n작업을 저장하세요!",
+        "grace_period_warning_lock": "⚠️ 시간이 만료되었습니다!\n60초 후에 화면이 잠깁니다.\n작업을 저장하세요!",
+        "grace_period_warning": "⚠️ 시간이 만료되었습니다!\n60초 후에 시스템이 종료됩니다.\n작업을 저장하세요!",
+        "timer_resumed": "이전 타이머가 자동으로 재개되었습니다.\n남은 시간: {time}",
+        "timer_expired_while_closed": "프로그램이 닫힌 동안 타이머가 만료되었습니다.",
+        "tamper_detected": "⚠️ 비밀번호 파일이 삭제된 것이 감지되었습니다.\n통계에 기록이 남았습니다. 비밀번호를 다시 설정하세요.",
+        "shutdown_reason": "TimeParents: 시간이 만료되었습니다. 60초 후에 시스템이 종료됩니다.",
+        "type_tamper": "⚠️ 변조 감지",
     },
     
     "en": {
@@ -145,9 +175,12 @@ LANGUAGES = {
         "action_after_time": "Action After Time Expires",
         "shutdown": "Shutdown System",
         "logoff": "Log Off",
+        "lock": "Lock Screen",
         "start_timer": "Start Timer",
         "stop_timer": "Stop / Change Timer",
         "timer_running_note": "* Timer continues running even if window is closed.",
+        "restore": "Restore Window",
+        "tray_running_msg": "TimeParents is running in the background (system tray).",
         
         # Buttons
         "about": "About",
@@ -191,6 +224,12 @@ LANGUAGES = {
         "weekly_stats": "This Week's Statistics",
         "recent_logs": "Recent Usage Logs",
         "no_logs": "No logs available.",
+        "daily_average": "Daily Average",
+        "weekly_total": "Weekly Total",
+        "search_total": "Search Period Total",
+        "search_tab": "Search Logs",
+        "all": "All",
+        "search": "Search",
         "monday": "Monday",
         "tuesday": "Tuesday",
         "wednesday": "Wednesday",
@@ -213,6 +252,27 @@ LANGUAGES = {
         "theme": "Theme",
         "dark_mode": "Dark Mode",
         "light_mode": "Light Mode",
+        
+        # Daily Limit
+        "daily_limit": "Daily Usage Limit",
+        "daily_limit_hours": "Hours",
+        "daily_limit_minutes": "Minutes",
+        "daily_limit_enable": "Enable Daily Limit",
+        "daily_remaining": "Remaining today: {time}",
+        "daily_limit_exceeded": "Today's daily limit has already been exceeded.",
+        "daily_limit_capped": "Timer has been adjusted to {time} to match the daily limit.",
+        "no_limit": "No Limit",
+        
+        # Grace Period & Auto-Resume
+        "grace_period_warning_shutdown": "⚠️ Time's up!\nSystem will shut down in 60 seconds.\nPlease save your work!",
+        "grace_period_warning_logoff": "⚠️ Time's up!\nSystem will log off in 60 seconds.\nPlease save your work!",
+        "grace_period_warning_lock": "⚠️ Time's up!\nScreen will lock in 60 seconds.\nPlease save your work!",
+        "grace_period_warning": "⚠️ Time's up!\nSystem will shut down in 60 seconds.\nPlease save your work!",
+        "timer_resumed": "Previous timer has been automatically resumed.\nRemaining: {time}",
+        "timer_expired_while_closed": "Timer expired while the program was closed.",
+        "tamper_detected": "⚠️ The password file was deleted.\nThis has been recorded in the statistics. Please set the password again.",
+        "shutdown_reason": "TimeParents: Time is up. The system will shut down in 60 seconds.",
+        "type_tamper": "⚠️ Tampering detected",
     }
 }
 
