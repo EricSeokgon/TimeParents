@@ -178,10 +178,30 @@ class ProcessTimer(GameTimer):
         return self._is_running
 
     def _check_process(self):
-        target = _normalize_exe(self.process_name)
-        names = list_process_names()
-        if self.exact:
-            # 프리셋은 실행 파일 이름 정확히 일치 ("steam"이 "steamwebhelper"에 걸리지 않도록)
-            return target in names
-        # 직접 입력한 이름은 일부만 입력해도 동작하도록 부분 일치 유지
-        return any(target in name for name in names)
+        return bool(find_processes(self.process_name, self.exact))
+
+
+def find_processes(process_name, exact=True):
+    """실행 중인 프로세스 중 process_name에 해당하는 실행 파일 이름 목록을 반환합니다."""
+    target = _normalize_exe(process_name)
+    names = list_process_names()
+    if exact:
+        # 프리셋은 실행 파일 이름 정확히 일치 ("steam"이 "steamwebhelper"에 걸리지 않도록)
+        return [target] if target in names else []
+    # 직접 입력한 이름은 일부만 입력해도 동작하도록 부분 일치 유지
+    return [name for name in names if target in name]
+
+
+def kill_process(process_name, exact=True):
+    """해당 게임 프로세스를 강제 종료하고, 종료한 실행 파일 이름 목록을 반환합니다."""
+    matched = find_processes(process_name, exact)
+    if platform.system() != "Windows":
+        return matched
+    import subprocess
+    for name in matched:
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/IM", f"{name}.exe"],
+                           creationflags=subprocess.CREATE_NO_WINDOW, capture_output=True, check=False)
+        except Exception:
+            pass
+    return matched

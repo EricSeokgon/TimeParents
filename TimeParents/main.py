@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 import utils
 import system_control
+import timer_logic
 from timer_logic import GameTimer, ProcessTimer
 import sys
 from datetime import datetime, timedelta
@@ -20,6 +21,7 @@ VERSION = "1.5.0"
 GRACE_SECONDS = 60
 RELOCK_INTERVAL_MS = 60 * 1000  # 잠금 동작 후 비밀번호로 중지할 때까지 재잠금 주기
 TAB_KEYS = ("tab_game", "tab_countdown", "tab_schedule")
+GAME_BLOCK_INTERVAL = 3  # 게임 차단 중 프로세스 확인 주기 (초)
 
 # Load theme before creating app
 current_theme = utils.load_theme()
@@ -58,6 +60,7 @@ class GameTimerApp(ctk.CTk):
         self.action_var = ctk.StringVar(value="shutdown")
         self._fallback_timer = None  # UI가 막혀도 만료 동작을 실행하기 위한 백업 타이머
         self._relock_job = None
+        self._game_block_job = None
         self._action_done = False
         self._timer_action = "shutdown"
         self.timer_type = None
@@ -83,9 +86,15 @@ class GameTimerApp(ctk.CTk):
                 utils.save_log(0, "tamper", "password")
                 self.after(300, lambda: WarningDialog(self, languages.get_text("tamper_detected", self.current_lang)))
         else:
-            # 저장된 타이머 상태가 있으면 자동 복원
+            # 오늘 게임 차단 중이었으면 재시작/재부팅 후에도 이어서 차단
+            game_block = utils.load_game_block()
             saved_state = utils.load_timer_state()
-            if saved_state:
+            if game_block:
+                self.timer_target = game_block["target"]
+                self.timer_exact = game_block.get("exact", True)
+                self._start_game_block(self.timer_target, self.timer_exact)
+            # 저장된 타이머 상태가 있으면 자동 복원
+            elif saved_state:
                 self._resume_timer(saved_state)
             else:
                 self.show_dashboard()
@@ -310,6 +319,7 @@ class GameTimerApp(ctk.CTk):
         ctk.CTkRadioButton(self.container, text=languages.get_text("shutdown", self.current_lang), variable=self.action_var, value="shutdown").pack(pady=5)
         ctk.CTkRadioButton(self.container, text=languages.get_text("logoff", self.current_lang), variable=self.action_var, value="logoff").pack(pady=5)
         ctk.CTkRadioButton(self.container, text=languages.get_text("lock", self.current_lang), variable=self.action_var, value="lock").pack(pady=5)
+        ctk.CTkRadioButton(self.container, text=languages.get_text("kill_game_option", self.current_lang), variable=self.action_var, value="kill_game").pack(pady=5)
 
         ctk.CTkButton(self.container, text=languages.get_text("start_timer", self.current_lang), command=self.start_timer, fg_color="green").pack(pady=20, fill="x")
         
@@ -588,6 +598,10 @@ class GameTimerApp(ctk.CTk):
             messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("min_time_1min", self.current_lang))
             return
 
+        if self.action_var.get() == "kill_game" and not process_name:
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("kill_game_needs_game_tab", self.current_lang))
+            return
+
         # 일일 제한 체크 ("특정 시간"은 종료 예약이므로 사용 시간 제한을 적용하지 않음)
         daily_remaining = utils.get_daily_remaining() if tab_key != "tab_schedule" else -1
         if daily_remaining == 0:
@@ -719,6 +733,47 @@ class GameTimerApp(ctk.CTk):
         elif action == "lock":
             system_control.lock_system()
             self._start_relock()
+        elif action == "kill_game":
+            utils.save_game_block(self.timer_target, self.timer_exact)
+            self._start_game_block(self.timer_target, self.timer_exact)
+
+    def _start_game_block(self, target, exact):
+        """게임을 종료하고, 그날은 다시 실행해도 비밀번호로 중지할 때까지 계속 종료합니다."""
+        self._stop_game_block()
+        stop_event = threading.Event()
+        self._game_block_job = stop_event
+        block_date = datetime.now().date()
+
+        def loop():
+            while not stop_event.is_set():
+                if datetime.now().date() != block_date:
+                    # 날짜가 바뀌면 차단 해제
+                    utils.clear_game_block()
+                    stop_event.set()
+                    self.after(0, self._on_game_block_expired, stop_event)
+                    return
+                timer_logic.kill_process(target, exact)
+                stop_event.wait(GAME_BLOCK_INTERVAL)
+
+        threading.Thread(target=loop, daemon=True).start()
+        self.after(0, self.show_blocked_screen, target)
+
+    def _stop_game_block(self):
+        if self._game_block_job:
+            self._game_block_job.set()
+            self._game_block_job = None
+
+    def _on_game_block_expired(self, job):
+        if self._game_block_job is job:
+            self._game_block_job = None
+            self.show_dashboard()
+
+    def show_blocked_screen(self, target):
+        self.clear_container()
+        ctk.CTkLabel(self.container, text="🚫", font=("Arial", 48)).pack(pady=(40, 10))
+        ctk.CTkLabel(self.container, text=languages.get_text("game_blocked", self.current_lang).format(game=target),
+                     font=("Arial", 16, "bold"), text_color="#FF5555", wraplength=320).pack(pady=20)
+        ctk.CTkButton(self.container, text=languages.get_text("stop_timer", self.current_lang), command=self.prompt_stop_timer, fg_color="red").pack(pady=40, fill="x")
 
     def _start_relock(self):
         """잠금 해제 후에도 비밀번호로 타이머를 중지할 때까지 주기적으로 다시 잠급니다."""
@@ -741,6 +796,9 @@ class GameTimerApp(ctk.CTk):
         """예약된 종료/백업 동작/재잠금/유예 창을 모두 해제합니다."""
         self._cancel_fallback()
         self._stop_relock()
+        if self._game_block_job:
+            self._stop_game_block()
+            utils.clear_game_block()
         self._action_done = True
         system_control.cancel_shutdown()  # 예약된 종료가 있으면 취소
         if self.grace_dialog:
@@ -748,7 +806,8 @@ class GameTimerApp(ctk.CTk):
             self.grace_dialog = None
 
     def _is_enforcing(self):
-        return bool((self.timer and self.timer.running) or self.grace_dialog is not None or self._relock_job)
+        return bool((self.timer and self.timer.running) or self.grace_dialog is not None
+                    or self._relock_job or self._game_block_job)
 
     def _show_grace_warning(self):
         """유예 경고를 표시합니다. (동작 자체는 _arm_expire_action에서 이미 예약됨)"""

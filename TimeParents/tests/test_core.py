@@ -139,6 +139,44 @@ class TimerTests(unittest.TestCase):
             timer_logic.list_process_names = original
 
 
+class GameBlockTests(unittest.TestCase):
+    def setUp(self):
+        _reset_data()
+
+    def test_block_persists_today_and_expires_next_day(self):
+        utils.save_game_block("RobloxPlayerBeta", True)
+        self.assertEqual(utils.load_game_block()["target"], "RobloxPlayerBeta")
+        settings = utils.load_settings()
+        settings["game_block"]["date"] = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        utils.save_settings(settings)
+        self.assertIsNone(utils.load_game_block())
+        self.assertNotIn("game_block", utils.load_settings())
+
+    def test_find_processes(self):
+        original = timer_logic.list_process_names
+        timer_logic.list_process_names = lambda: {"robloxplayerbeta", "robloxstudio", "steam"}
+        try:
+            self.assertEqual(timer_logic.find_processes("RobloxPlayerBeta"), ["robloxplayerbeta"])
+            self.assertEqual(sorted(timer_logic.find_processes("roblox", exact=False)), ["robloxplayerbeta", "robloxstudio"])
+            self.assertEqual(timer_logic.find_processes("minecraft"), [])
+        finally:
+            timer_logic.list_process_names = original
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows only")
+    def test_kill_process_really_terminates(self):
+        import subprocess
+        proc = subprocess.Popen(["ping", "-n", "60", "127.0.0.1"], stdout=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+        try:
+            time.sleep(0.5)
+            self.assertIn("ping", timer_logic.kill_process("PING.EXE"))
+            proc.wait(timeout=5)
+            self.assertIsNotNone(proc.returncode)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+
+
 class ResumeTests(unittest.TestCase):
     """저장된 타이머 상태로부터의 복원 (GUI 필요)."""
 
@@ -177,7 +215,10 @@ class ResumeTests(unittest.TestCase):
         if app.timer:
             app.timer.stop()
         app._stop_enforcement()
-        app.destroy()
+        try:
+            app.destroy()
+        except Exception:
+            pass  # 테스트에서 이미 닫은 창
 
     def test_new_day_resets_and_logs_on_saved_date(self):
         yesterday = datetime.now() - timedelta(days=1)
@@ -207,6 +248,40 @@ class ResumeTests(unittest.TestCase):
         self.assertTrue(app._is_enforcing())
         app._stop_timer()
         self.assertFalse(app._is_enforcing())
+
+    def test_kill_game_blocks_until_password_stop_and_survives_restart(self):
+        killed = []
+        original = timer_logic.kill_process
+        timer_logic.kill_process = lambda name, exact=True: killed.append((name, exact)) or []
+        self.addCleanup(setattr, timer_logic, "kill_process", original)
+
+        app = self._make_app(datetime.now() - timedelta(minutes=40), time.time() - 43200,
+                             timer_type="game", target="RobloxPlayerBeta", action="kill_game")
+        time.sleep(0.5)
+        app.update()
+        app.execute_expire_action("kill_game")
+        time.sleep(0.3)
+        app.update()
+        self.assertIn(("RobloxPlayerBeta", True), killed)
+        self.assertTrue(app._is_enforcing())
+        self.assertEqual(utils.load_game_block()["target"], "RobloxPlayerBeta")
+        app.timer = None
+        app._game_block_job.set()  # 이 앱 인스턴스 종료 (강제 종료 흉내)
+        app._game_block_job = None
+        app.destroy()
+
+        # 재시작하면 차단이 이어짐
+        killed.clear()
+        restarted = self.main.GameTimerApp()
+        restarted.withdraw()
+        self.addCleanup(self._close, restarted)
+        time.sleep(0.3)
+        restarted.update()
+        self.assertTrue(killed and restarted._game_block_job is not None)
+
+        restarted._stop_timer()
+        self.assertIsNone(utils.load_game_block())
+        self.assertFalse(restarted._is_enforcing())
 
 
 if __name__ == "__main__":

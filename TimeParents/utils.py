@@ -321,6 +321,28 @@ def get_daily_remaining():
     used = get_today_total(usage_only=True)
     return max(0, limit - used)
 
+# --- Game Block (게임 시간 만료 후 그날은 게임을 다시 실행해도 자동 종료) ---
+
+def save_game_block(target, exact):
+    settings = load_settings()
+    settings["game_block"] = {"target": target, "exact": exact, "date": datetime.now().strftime("%Y-%m-%d")}
+    save_settings(settings)
+
+def load_game_block():
+    """오늘 날짜의 게임 차단 정보를 반환합니다. 날짜가 지났으면 지우고 None."""
+    block = load_settings().get("game_block")
+    if not block:
+        return None
+    if block.get("date") != datetime.now().strftime("%Y-%m-%d"):
+        clear_game_block()
+        return None
+    return block
+
+def clear_game_block():
+    settings = load_settings()
+    if settings.pop("game_block", None) is not None:
+        save_settings(settings)
+
 # --- Autostart (강제 종료 후 재로그인 시 자동 실행 → 저장된 타이머 복원) ---
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
