@@ -1,149 +1,66 @@
-# 타임페어런츠 (TimeParents) v1.2.0
+<p align="center">
+  <img src="TimeParents/assets/icon.png" width="96" alt="TimeParents 아이콘">
+</p>
 
-Windows용 게임 시간 관리 프로그램
+# 타임페어런츠 (TimeParents) v1.9.0
 
-## 📋 주요 기능
+자녀의 PC·게임 사용 시간을 관리하는 Windows용 자녀 보호 프로그램입니다.
 
-### 1. 세 가지 타이머 모드
-- **특정 게임**: 특정 게임(예: Roblox)의 실행 시간을 추적하여 설정한 시간이 지나면 자동으로 시스템 종료/로그오프
-- **카운트다운**: 설정한 시간이 지나면 자동으로 시스템 종료/로그오프
-- **특정 시간**: 지정한 시간(예: 오후 10시)에 자동으로 시스템 종료/로그오프
+<p align="center">
+  <img src="TimeParents/docs/screenshot_main.png" width="300" alt="메인 화면">
+  &nbsp;
+  <img src="TimeParents/docs/screenshot_settings.png" width="300" alt="설정 화면">
+</p>
 
-### 2. 사용 통계 📊
-- **일일 사용량**: 오늘의 총 사용 시간을 한눈에 확인
-- **주간 통계**: 최근 일주일간의 사용량을 막대 그래프로 시각화
-- **사용 기록**: 최근 사용 내역(날짜, 모드, 사용 시간) 상세 조회
-- **보안**: 통계 접근 시 비밀번호 확인
+## 📥 다운로드
 
-### 3. 편의 기능
-- **테마 선택 (New!) 🎨**: 다크 모드(Dark)와 라이트 모드(Light) 지원
-- **다국어 지원 🌐**: 한국어(Korean) 및 영어(English) 완벽 지원
-- **시간 선택기 🕐**: "특정 시간" 모드에서 직관적인 UI로 종료 시간 설정
-- **설정 자동 저장**: 다음 실행 시 이전 설정(언어, 테마 포함) 자동 로드
-- **시간 경고 알림**: 종료 전 알림 (비차단 방식)
-- **백그라운드 실행**: 창을 닫아도 타이머 계속 작동
+**[최신 버전 다운로드 (GitHub Releases)](https://github.com/EricSeokgon/TimeParents/releases/latest)**
 
-### 4. 보안 기능
-- 비밀번호 보호로 타이머 설정 변경 방지
-- 타이머 중지 시 비밀번호 필요
-- SHA-256 해시를 사용한 안전한 비밀번호 저장
+zip 파일을 받아 압축을 풀고 `TimeParents.exe`를 실행하면 됩니다. Python을 설치할 필요는 없습니다.
 
-## 🚀 사용 방법
+## ✨ 주요 기능
 
-### 실행 파일 사용 (권장)
-1. `dist/TimeParents.exe` 파일을 실행
-2. Python 설치 불필요
+- **3가지 타이머 모드**: 카운트다운, 특정 시각에 종료, 특정 게임이 켜져 있을 때만 시간 차감
+- **일일 사용 제한**: 하루 총 사용 시간 제한, 주말(토·일)은 따로 설정 가능
+- **사용 금지 시간대**: 예) 21:00 ~ 07:00. 타이머를 켜지 않아도 적용되고 10·5·1분 전에 미리 경고
+- **시간 종료 후 동작**: 시스템 종료, 로그오프, 화면 잠금, 게임만 종료 (모두 60초 유예 후 실행)
+- **우회 방지**: 비밀번호 없이는 중지·종료·설정 변경 불가, 작업 관리자로 강제 종료해도 다시 켜지면 타이머 복원
+- **사용 통계**: 일일·주간 사용 기록 확인
+- 다크/라이트 테마, 한국어/English 지원
 
-### Python으로 실행
+자세한 기능 설명, 비밀번호 재설정 방법, 버전 기록은 **[TimeParents/README.md](TimeParents/README.md)** 에 있습니다.
+
+## 🚀 소스에서 실행하기
+
 ```bash
-# 필요한 패키지 설치
-pip install customtkinter
-
-# 프로그램 실행
+cd TimeParents
+pip install -r requirements.txt
 python main.py
 ```
 
-## 📖 사용 가이드
+실행 파일 빌드와 테스트:
 
-### 초기 설정
-1. 프로그램을 처음 실행하면 비밀번호 설정 화면이 나타납니다
-2. 비밀번호를 입력하고 확인합니다
-
-### 타이머 설정
-
-#### 특정 게임 모드
-1. "특정 게임" 탭 선택
-2. 허용할 게임 시간 입력 (시간/분)
-3. 프로세스 이름 입력 (기본값: Roblox)
-   - 다른 게임의 경우 해당 게임의 프로세스 이름 입력
-4. 시간 종료 후 동작 선택 (시스템 종료/로그오프)
-5. "타이머 시작" 클릭
-
-> **참고**: 게임이 실행 중일 때만 시간이 차감됩니다
-
-#### 카운트다운 모드
-1. "카운트다운" 탭 선택
-2. 시간 입력 (시간/분)
-3. 시간 종료 후 동작 선택
-4. "타이머 시작" 클릭
-
-#### 특정 시간 모드
-1. "특정 시간" 탭 선택
-2. "🕐 시간 선택" 버튼 클릭 또는 직접 시간 입력
-3. 시간 종료 후 동작 선택
-4. "타이머 시작" 클릭
-
-### 부가 기능 활용
-
-#### 🎨 테마 변경
-- 메인 화면 하단의 테마 선택 메뉴(🎨) 사용
-- **Dark** (다크 모드) 또는 **Light** (라이트 모드) 선택
-
-#### 📊 통계 보기
-- 메인 화면에서 "통계 보기" 버튼 클릭
-- 비밀번호 입력 후 일일/주간 사용량 및 상세 기록 확인
-
-#### 🌐 언어 변경
-- 메인 화면 하단의 언어 선택 메뉴(🌐) 사용
-- 한국어(ko) 또는 영어(en) 선택 시 즉시 적용
-
-#### ℹ️ 만든이 소개
-- "만든이 소개" 버튼을 클릭하여 제작자 정보 및 웹사이트 방문
-
-## 🛠️ 개발자 정보
-
-### 프로젝트 구조
-```
-TimeParents/
-├── main.py              # 메인 GUI 애플리케이션
-├── timer_logic.py       # 타이머 로직 (GameTimer, ProcessTimer)
-├── system_control.py    # 시스템 제어 (종료/로그오프)
-├── utils.py             # 유틸리티 함수 (비밀번호, 설정, 통계)
-├── languages.py         # 다국어 번역 데이터
-├── password.json        # 비밀번호 저장 (해시)
-├── settings.json        # 사용자 설정 저장
-├── stats.json           # 사용 통계 데이터
-├── build_exe.bat        # 실행 파일 빌드 스크립트
-└── dist/
-    └── TimeParents.exe  # 실행 파일
-```
-
-### 실행 파일 빌드
 ```bash
-# PyInstaller 설치
-pip install pyinstaller
-
-# 빌드 (방법 1: 배치 파일 사용)
-build_exe.bat
-
-# 빌드 (방법 2: 직접 명령어 실행)
-python -m PyInstaller --onefile --windowed --name "TimeParents" main.py
+cd TimeParents
+pyinstaller --noconfirm TimeParents.spec
+python -m unittest discover -s tests
 ```
 
-### 기술 스택
-- **Python 3.x**
-- **CustomTkinter**: 모던한 GUI 프레임워크
-- **Threading**: 백그라운드 타이머 실행
-- **Subprocess**: 프로세스 모니터링 (특정 게임 모드)
-- **PyInstaller**: 실행 파일 생성
+## 📁 저장소 구성
 
-## ⚠️ 주의사항
-
-1. **관리자 권한**: 시스템 종료/로그오프 기능을 사용하려면 관리자 권한이 필요할 수 있습니다
-2. **프로세스 이름**: 특정 게임 모드에서 정확한 프로세스 이름을 입력해야 합니다
-   - 작업 관리자에서 프로세스 이름 확인 가능
-   - 예: Roblox, minecraft, League of Legends 등
-3. **비밀번호 분실**: 비밀번호를 분실한 경우 `password.json` 파일을 삭제하고 다시 설정해야 합니다
-4. **설정 초기화**: 설정을 초기화하려면 `settings.json` 파일을 삭제하세요
+| 폴더 | 내용 |
+| --- | --- |
+| [`TimeParents/`](TimeParents) | 타임페어런츠 프로그램 (Python, CustomTkinter) |
+| [`ChromeBookmarkManager/`](ChromeBookmarkManager) | Chrome 북마크 관리 확장 프로그램 |
 
 ## 📝 라이선스
 
-이 프로젝트는 개인 및 교육 목적으로 자유롭게 사용할 수 있습니다.
+개인 및 교육 목적으로 자유롭게 사용할 수 있습니다.
 
 ## 🤝 기여
 
-버그 리포트나 기능 제안은 언제든지 환영합니다!
+버그 제보나 기능 제안은 언제든지 환영합니다! ([Issues](https://github.com/EricSeokgon/TimeParents/issues), leesk55@gmail.com)
 
 ---
 
-**TimeParents** - 자녀의 건강한 게임 습관을 위한 스마트한 선택
+**TimeParents** - 자녀의 건강한 PC 사용 습관을 위한 선택

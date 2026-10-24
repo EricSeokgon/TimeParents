@@ -20,6 +20,14 @@ def get_data_dir():
 
 DATA_DIR = get_data_dir()
 
+def resource_path(relative):
+    """번들 리소스 경로. PyInstaller exe에서는 압축이 풀린 임시 폴더를 기준으로 합니다."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative)
+
+ICON_ICO = resource_path(os.path.join("assets", "icon.ico"))
+ICON_PNG = resource_path(os.path.join("assets", "icon.png"))
+
 def migrate_file(old_name, new_path):
     """기존 로컬에 있던 파일을 보안 폴더로 마이그레이션하고 기존 파일을 삭제합니다."""
     if os.path.exists(old_name) and not os.path.exists(new_path):
@@ -313,13 +321,103 @@ def load_daily_limit():
     settings = load_settings()
     return settings.get("daily_limit", 0)
 
+def save_weekend_limit(seconds):
+    """주말(토·일) 제한 시간을 저장합니다 (초 단위). 0이면 평일과 같은 제한 사용."""
+    settings = load_settings()
+    settings["daily_limit_weekend"] = seconds
+    save_settings(settings)
+
+def load_weekend_limit():
+    """주말 제한 시간을 불러옵니다 (초 단위). 0이면 평일과 같은 제한 사용."""
+    return load_settings().get("daily_limit_weekend", 0)
+
+def get_limit_for_date(day=None):
+    """해당 날짜에 적용되는 제한 시간(초). 일일 제한이 꺼져 있으면 0."""
+    base = load_daily_limit()
+    if base <= 0:
+        return 0
+    day = day or datetime.now()
+    weekend = load_weekend_limit()
+    if day.weekday() >= 5 and weekend > 0:
+        return weekend
+    return base
+
 def get_daily_remaining():
     """오늘 남은 허용 시간을 초 단위로 반환합니다. 제한 없으면 -1."""
-    limit = load_daily_limit()
+    limit = get_limit_for_date()
     if limit <= 0:
         return -1
     used = get_today_total(usage_only=True)
     return max(0, limit - used)
+
+# --- Curfew (사용 금지 시간대, 예: 21:00 ~ 07:00) ---
+DEFAULT_CURFEW = {"enabled": False, "start": "21:00", "end": "07:00"}
+
+def parse_hhmm(text):
+    """'21:00', '7:5', '2100' 형태를 (시, 분)으로 변환합니다. 잘못된 값이면 ValueError."""
+    text = text.strip()
+    if ":" in text:
+        h_str, m_str = text.split(":", 1)
+    elif text.isdigit() and len(text) in (3, 4):
+        h_str, m_str = text[:-2], text[-2:]
+    else:
+        h_str, m_str = text, "0"
+    h, m = int(h_str), int(m_str or 0)
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError(f"invalid time: {text}")
+    return h, m
+
+def save_curfew(enabled, start, end):
+    settings = load_settings()
+    settings["curfew"] = {"enabled": enabled, "start": start, "end": end}
+    save_settings(settings)
+
+def load_curfew():
+    curfew = dict(DEFAULT_CURFEW)
+    curfew.update(load_settings().get("curfew") or {})
+    return curfew
+
+def _curfew_times(curfew, now):
+    sh, sm = parse_hhmm(curfew["start"])
+    eh, em = parse_hhmm(curfew["end"])
+    start = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+    end = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+    return start, end
+
+def curfew_window(curfew=None, now=None):
+    """지금이 사용 금지 시간대이면 (시작, 끝) datetime을, 아니면 None을 반환합니다. 자정을 넘는 구간도 지원."""
+    curfew = curfew or load_curfew()
+    if not curfew.get("enabled"):
+        return None
+    now = now or datetime.now()
+    try:
+        start, end = _curfew_times(curfew, now)
+    except (ValueError, KeyError):
+        return None
+    if start == end:
+        return None
+    if start < end:
+        return (start, end) if start <= now < end else None
+    # 자정을 넘는 구간 (예: 21:00 ~ 07:00)
+    if now >= start:
+        return start, end + timedelta(days=1)
+    if now < end:
+        return start - timedelta(days=1), end
+    return None
+
+def next_curfew_start(curfew=None, now=None):
+    """다음 사용 금지 시간대 시작 시각. 꺼져 있거나 설정이 잘못되었으면 None."""
+    curfew = curfew or load_curfew()
+    if not curfew.get("enabled"):
+        return None
+    now = now or datetime.now()
+    try:
+        start, end = _curfew_times(curfew, now)
+    except (ValueError, KeyError):
+        return None
+    if start == end:
+        return None
+    return start if start > now else start + timedelta(days=1)
 
 # --- Game Block (게임 시간 만료 후 그날은 게임을 다시 실행해도 자동 종료) ---
 
