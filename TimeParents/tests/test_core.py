@@ -158,6 +158,48 @@ class TimerTests(unittest.TestCase):
             timer_logic.list_process_names = original
 
 
+class CurfewTests(unittest.TestCase):
+    def setUp(self):
+        _reset_data()
+
+    def test_parse_hhmm(self):
+        self.assertEqual(utils.parse_hhmm("21:00"), (21, 0))
+        self.assertEqual(utils.parse_hhmm("7:5"), (7, 5))
+        self.assertEqual(utils.parse_hhmm("2130"), (21, 30))
+        self.assertEqual(utils.parse_hhmm("7"), (7, 0))
+        for bad in ("24:00", "12:60", "abc", ""):
+            with self.assertRaises(ValueError):
+                utils.parse_hhmm(bad)
+
+    def test_overnight_window(self):
+        c = {"enabled": True, "start": "21:00", "end": "07:00"}
+        day = datetime(2026, 10, 24)
+        self.assertIsNone(utils.curfew_window(c, day.replace(hour=20, minute=59)))
+        self.assertEqual(utils.curfew_window(c, day.replace(hour=21)),
+                         (day.replace(hour=21), day.replace(hour=7) + timedelta(days=1)))
+        self.assertEqual(utils.curfew_window(c, day.replace(hour=6, minute=59)),
+                         (day.replace(hour=21) - timedelta(days=1), day.replace(hour=7)))
+        self.assertIsNone(utils.curfew_window(c, day.replace(hour=7)))
+
+    def test_same_day_window_and_disabled(self):
+        c = {"enabled": True, "start": "13:00", "end": "15:00"}
+        day = datetime(2026, 10, 24)
+        self.assertIsNotNone(utils.curfew_window(c, day.replace(hour=14)))
+        self.assertIsNone(utils.curfew_window(c, day.replace(hour=16)))
+        self.assertIsNone(utils.curfew_window(dict(c, enabled=False), day.replace(hour=14)))
+
+    def test_next_start(self):
+        c = {"enabled": True, "start": "21:00", "end": "07:00"}
+        day = datetime(2026, 10, 24)
+        self.assertEqual(utils.next_curfew_start(c, day.replace(hour=20)), day.replace(hour=21))
+        self.assertEqual(utils.next_curfew_start(c, day.replace(hour=22)), day.replace(hour=21) + timedelta(days=1))
+
+    def test_saved_curfew_roundtrip(self):
+        self.assertFalse(utils.load_curfew()["enabled"])
+        utils.save_curfew(True, "22:30", "06:00")
+        self.assertEqual(utils.load_curfew(), {"enabled": True, "start": "22:30", "end": "06:00"})
+
+
 class GameBlockTests(unittest.TestCase):
     def setUp(self):
         _reset_data()
@@ -230,10 +272,22 @@ class ResumeTests(unittest.TestCase):
         return app
 
     @staticmethod
-    def _close(app):
+    def _drain(app, seconds=0.7):
+        """지연 파괴(close_window) 등 예약된 Tk 이벤트를 처리한 뒤 창을 닫도록 잠시 이벤트를 돌립니다."""
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            try:
+                app.update()
+            except Exception:
+                return
+            time.sleep(0.05)
+
+    @classmethod
+    def _close(cls, app):
         if app.timer:
             app.timer.stop()
         app._stop_enforcement()
+        cls._drain(app)
         try:
             app.destroy()
         except Exception:
@@ -267,6 +321,85 @@ class ResumeTests(unittest.TestCase):
         self.assertTrue(app._is_enforcing())
         app._stop_timer()
         self.assertFalse(app._is_enforcing())
+
+    def _plain_app(self):
+        app = self.main.GameTimerApp()
+        app.withdraw()
+        self.addCleanup(self._close, app)
+        return app
+
+    def test_curfew_enforces_once_and_password_overrides_until_window_end(self):
+        now = datetime.now()
+        start, end = now - timedelta(minutes=1), now + timedelta(minutes=30)
+        utils.save_curfew(True, start.strftime("%H:%M"), end.strftime("%H:%M"))
+        utils.save_settings(dict(utils.load_settings(), action="lock"))
+        errors = []
+        self.main.messagebox.showerror = lambda *a, **k: errors.append(a)
+        app = self.main.GameTimerApp()
+        app.withdraw()
+        app._verify_password = lambda: True
+        results = {}
+
+        # 화면 전환이 있는 흐름은 실제 앱처럼 mainloop 안에서 진행 (mainloop 없이 위젯을 만들고 지우면 Tk가 비정상 종료됨)
+        def start_countdown():
+            app.tab_view.set(languages.get_text("tab_countdown", app.current_lang))
+            app.min_entry.delete(0, "end")
+            app.min_entry.insert(0, "10")
+            app.start_timer()
+
+        def step1():
+            start_countdown()  # 금지 시간대에는 타이머 시작 거부
+            results["refused"] = app.timer is None and bool(errors)
+            app._curfew_tick()
+            results["enforced"] = app.grace_dialog is not None and app._timer_action == "lock" and app._fallback_timer is not None
+            dialog = app.grace_dialog
+            app._curfew_tick()
+            results["once_per_window"] = app.grace_dialog is dialog
+            # 유예 창이 뜬 직후 바로 중지해도 Tk가 비정상 종료되지 않아야 함 (close_window 회귀 테스트)
+            app.prompt_stop_timer()  # 부모가 비밀번호로 중지 → 대시보드
+            app.after(500, step2)
+
+        def step2():
+            results["stopped"] = not app._is_enforcing() and app._curfew_override_until is not None
+            app._curfew_tick()
+            results["not_reenforced"] = app.grace_dialog is None
+            start_countdown()
+            results["start_allowed_after_override"] = app.timer is not None
+            app.timer.stop()
+            app._stop_enforcement()
+            app.after(200, app.quit)
+
+        app.after(300, step1)
+        app.after(15000, app.quit)  # 안전장치
+        app.mainloop()
+        self._close(app)
+        self.assertEqual(results, dict.fromkeys(
+            ["refused", "enforced", "once_per_window", "stopped", "not_reenforced", "start_allowed_after_override"], True))
+
+    def test_curfew_stops_running_timer_and_logs_usage(self):
+        app = self._plain_app()
+        app.timer = timer_logic.GameTimer(1800)
+        app.timer.remaining = 1200
+        app.timer.running = True
+        app.initial_duration, app.timer_type, app.timer_target = 1800, "countdown", None
+        before = len(utils.load_logs())
+        app._enforce_curfew({"enabled": True, "start": "21:00", "end": "07:00"})
+        self.assertIsNone(app.timer)
+        self.assertEqual(utils.load_logs()[before]["duration"], 600)
+
+    def test_curfew_warning_shows_nearest_only_once(self):
+        shown = []
+        original = self.main.WarningDialog
+        self.main.WarningDialog = lambda parent, text, **k: shown.append(text)
+        self.addCleanup(setattr, self.main, "WarningDialog", original)
+        app = self._plain_app()
+        c = {"enabled": True, "start": "21:00", "end": "07:00"}
+        day = datetime.now().replace(hour=20, minute=56, second=0, microsecond=0)
+        app._warn_before_curfew(c, day)  # 4분 전: 5분 경고 하나만
+        app._warn_before_curfew(c, day + timedelta(seconds=15))
+        self.assertEqual(len(shown), 1)
+        app._warn_before_curfew(c, day.replace(minute=59, second=30))  # 1분 경고
+        self.assertEqual(len(shown), 2)
 
     def test_limit_change_needs_password_and_is_not_overwritten(self):
         self.main.messagebox.showinfo = lambda *a, **k: None

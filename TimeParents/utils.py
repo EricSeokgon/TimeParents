@@ -342,6 +342,75 @@ def get_daily_remaining():
     used = get_today_total(usage_only=True)
     return max(0, limit - used)
 
+# --- Curfew (사용 금지 시간대, 예: 21:00 ~ 07:00) ---
+DEFAULT_CURFEW = {"enabled": False, "start": "21:00", "end": "07:00"}
+
+def parse_hhmm(text):
+    """'21:00', '7:5', '2100' 형태를 (시, 분)으로 변환합니다. 잘못된 값이면 ValueError."""
+    text = text.strip()
+    if ":" in text:
+        h_str, m_str = text.split(":", 1)
+    elif text.isdigit() and len(text) in (3, 4):
+        h_str, m_str = text[:-2], text[-2:]
+    else:
+        h_str, m_str = text, "0"
+    h, m = int(h_str), int(m_str or 0)
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError(f"invalid time: {text}")
+    return h, m
+
+def save_curfew(enabled, start, end):
+    settings = load_settings()
+    settings["curfew"] = {"enabled": enabled, "start": start, "end": end}
+    save_settings(settings)
+
+def load_curfew():
+    curfew = dict(DEFAULT_CURFEW)
+    curfew.update(load_settings().get("curfew") or {})
+    return curfew
+
+def _curfew_times(curfew, now):
+    sh, sm = parse_hhmm(curfew["start"])
+    eh, em = parse_hhmm(curfew["end"])
+    start = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+    end = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+    return start, end
+
+def curfew_window(curfew=None, now=None):
+    """지금이 사용 금지 시간대이면 (시작, 끝) datetime을, 아니면 None을 반환합니다. 자정을 넘는 구간도 지원."""
+    curfew = curfew or load_curfew()
+    if not curfew.get("enabled"):
+        return None
+    now = now or datetime.now()
+    try:
+        start, end = _curfew_times(curfew, now)
+    except (ValueError, KeyError):
+        return None
+    if start == end:
+        return None
+    if start < end:
+        return (start, end) if start <= now < end else None
+    # 자정을 넘는 구간 (예: 21:00 ~ 07:00)
+    if now >= start:
+        return start, end + timedelta(days=1)
+    if now < end:
+        return start - timedelta(days=1), end
+    return None
+
+def next_curfew_start(curfew=None, now=None):
+    """다음 사용 금지 시간대 시작 시각. 꺼져 있거나 설정이 잘못되었으면 None."""
+    curfew = curfew or load_curfew()
+    if not curfew.get("enabled"):
+        return None
+    now = now or datetime.now()
+    try:
+        start, end = _curfew_times(curfew, now)
+    except (ValueError, KeyError):
+        return None
+    if start == end:
+        return None
+    return start if start > now else start + timedelta(days=1)
+
 # --- Game Block (게임 시간 만료 후 그날은 게임을 다시 실행해도 자동 종료) ---
 
 def save_game_block(target, exact):

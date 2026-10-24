@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import webbrowser
 import languages
 import stats_window
-from dialogs import WarningDialog, GraceWarningDialog, PasswordDialog, TimePickerDialog
+from dialogs import close_window, WarningDialog, GraceWarningDialog, PasswordDialog, TimePickerDialog
 import pystray
 from PIL import Image, ImageDraw
 import threading
@@ -22,6 +22,9 @@ GRACE_SECONDS = 60
 RELOCK_INTERVAL_MS = 60 * 1000  # 잠금 동작 후 비밀번호로 중지할 때까지 재잠금 주기
 TAB_KEYS = ("tab_game", "tab_countdown", "tab_schedule")
 GAME_BLOCK_INTERVAL = 3  # 게임 차단 중 프로세스 확인 주기 (초)
+CURFEW_CHECK_MS = 15 * 1000  # 사용 금지 시간대 확인 주기
+CURFEW_FIRST_CHECK_MS = 3 * 1000
+CURFEW_WARNINGS = (600, 300, 60)  # 금지 시간 시작 전 경고 (10분, 5분, 1분 전)
 
 # Load theme before creating app
 current_theme = utils.load_theme()
@@ -61,6 +64,9 @@ class GameTimerApp(ctk.CTk):
         self._fallback_timer = None  # UI가 막혀도 만료 동작을 실행하기 위한 백업 타이머
         self._relock_job = None
         self._game_block_job = None
+        self._curfew_enforced_start = None  # 이미 동작을 실행한 금지 구간의 시작 시각
+        self._curfew_override_until = None  # 비밀번호로 중지한 경우 이 시각까지 금지 해제
+        self._curfew_warned = set()
         self._action_done = False
         self._timer_action = "shutdown"
         self.timer_type = None
@@ -98,6 +104,9 @@ class GameTimerApp(ctk.CTk):
                 self._resume_timer(saved_state)
             else:
                 self.show_dashboard()
+
+        # 사용 금지 시간대 감시 (타이머 실행 여부와 관계없이 동작)
+        self.after(CURFEW_FIRST_CHECK_MS, self._check_curfew)
 
     def clear_container(self):
         for widget in self.container.winfo_children():
@@ -306,6 +315,28 @@ class GameTimerApp(ctk.CTk):
 
         self._apply_daily_limit_state()
 
+        # Curfew Section (사용 금지 시간대)
+        curfew = utils.load_curfew()
+        curfew_frame = ctk.CTkFrame(self.container)
+        curfew_frame.pack(pady=10, fill="x")
+        ctk.CTkLabel(curfew_frame, text=languages.get_text("curfew", self.current_lang), font=("Arial", 13, "bold")).pack(pady=(5, 2))
+        self.curfew_var = ctk.BooleanVar(value=curfew["enabled"])
+        ctk.CTkCheckBox(curfew_frame, text=languages.get_text("curfew_enable", self.current_lang),
+                        variable=self.curfew_var, command=self._on_curfew_toggled).pack(pady=2)
+        curfew_row = ctk.CTkFrame(curfew_frame, fg_color="transparent")
+        curfew_row.pack(pady=5)
+        self.curfew_start_entry = ctk.CTkEntry(curfew_row, width=70, placeholder_text="21:00")
+        self.curfew_start_entry.insert(0, curfew["start"])
+        self.curfew_start_entry.pack(side="left", padx=3)
+        ctk.CTkLabel(curfew_row, text="~").pack(side="left", padx=3)
+        self.curfew_end_entry = ctk.CTkEntry(curfew_row, width=70, placeholder_text="07:00")
+        self.curfew_end_entry.insert(0, curfew["end"])
+        self.curfew_end_entry.pack(side="left", padx=3)
+        self.curfew_save_btn = ctk.CTkButton(curfew_row, text=languages.get_text("save", self.current_lang), width=60, command=self._on_curfew_save)
+        self.curfew_save_btn.pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(curfew_frame, text=languages.get_text("curfew_note", self.current_lang), font=("Arial", 11), text_color="gray").pack(pady=(0, 5))
+        self._apply_curfew_state()
+
         # Action Selection
         ctk.CTkLabel(self.container, text=languages.get_text("action_after_time", self.current_lang)).pack(pady=(10, 5))
         ctk.CTkRadioButton(self.container, text=languages.get_text("shutdown", self.current_lang), variable=self.action_var, value="shutdown").pack(pady=5)
@@ -381,6 +412,40 @@ class GameTimerApp(ctk.CTk):
         if pw is not None:
             WarningDialog(self, languages.get_text("password_incorrect", self.current_lang), title_key="error")
         return False
+
+    def _apply_curfew_state(self):
+        state = "normal" if self.curfew_var.get() else "disabled"
+        for widget in (self.curfew_start_entry, self.curfew_end_entry, self.curfew_save_btn):
+            widget.configure(state=state)
+
+    def _read_curfew_entries(self):
+        """입력한 시작/끝 시각을 'HH:MM'으로 정규화합니다. 잘못되었으면 오류 표시 후 None."""
+        try:
+            times = [utils.parse_hhmm(entry.get()) for entry in (self.curfew_start_entry, self.curfew_end_entry)]
+        except ValueError:
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("enter_valid_time", self.current_lang))
+            return None
+        if times[0] == times[1]:
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("curfew_same_time", self.current_lang))
+            return None
+        return tuple(f"{h:02d}:{m:02d}" for h, m in times)
+
+    def _on_curfew_toggled(self):
+        """사용 금지 시간대 켜기/끄기는 비밀번호 확인 후에만 저장합니다."""
+        enabled = self.curfew_var.get()
+        times = self._read_curfew_entries() if enabled else (self.curfew_start_entry.get(), self.curfew_end_entry.get())
+        if times is None or not self._verify_password():
+            self.curfew_var.set(not enabled)
+            return
+        utils.save_curfew(enabled, *times)
+        self._apply_curfew_state()
+
+    def _on_curfew_save(self):
+        times = self._read_curfew_entries()
+        if times and self._verify_password():
+            utils.save_curfew(True, *times)
+            WarningDialog(self, languages.get_text("curfew_saved", self.current_lang).format(start=times[0], end=times[1]),
+                          title_key="curfew", color="#3B8ED0")
 
     @staticmethod
     def _read_limit_entries(h_entry, m_entry):
@@ -647,6 +712,13 @@ class GameTimerApp(ctk.CTk):
             messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("min_time_1min", self.current_lang))
             return
 
+        window = utils.curfew_window()
+        if window and not (self._curfew_override_until and datetime.now() < self._curfew_override_until):
+            curfew = utils.load_curfew()
+            messagebox.showerror(languages.get_text("error", self.current_lang),
+                                 languages.get_text("curfew_now", self.current_lang).format(start=curfew["start"], end=curfew["end"]))
+            return
+
         if self.action_var.get() == "kill_game" and not process_name:
             messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("kill_game_needs_game_tab", self.current_lang))
             return
@@ -817,6 +889,74 @@ class GameTimerApp(ctk.CTk):
             self._game_block_job = None
             self.show_dashboard()
 
+    def _check_curfew(self):
+        try:
+            self._curfew_tick()
+        except Exception as e:
+            print(f"Error checking curfew: {e}")
+        finally:
+            self.after(CURFEW_CHECK_MS, self._check_curfew)
+
+    def _curfew_tick(self, now=None):
+        if not utils.is_password_set():
+            return
+        now = now or datetime.now()
+        curfew = utils.load_curfew()
+        window = utils.curfew_window(curfew, now)
+        if window is None:
+            self._warn_before_curfew(curfew, now)
+            return
+        start, end = window
+        if self._curfew_override_until and now < self._curfew_override_until:
+            return
+        if self._curfew_enforced_start == start:
+            return  # 이번 구간은 이미 동작 실행됨 (재잠금 등은 계속 진행 중)
+        self._curfew_enforced_start = start
+        self._enforce_curfew(curfew)
+
+    def _warn_before_curfew(self, curfew, now):
+        next_start = utils.next_curfew_start(curfew, now)
+        if next_start is None:
+            return
+        until = (next_start - now).total_seconds()
+        due = [t for t in CURFEW_WARNINGS if until <= t and (next_start, t) not in self._curfew_warned]
+        if not due:
+            return
+        # 앱을 늦게 켠 경우 지나간 경고를 한꺼번에 띄우지 않고 가장 가까운 것 하나만 표시
+        for t in CURFEW_WARNINGS:
+            if until <= t:
+                self._curfew_warned.add((next_start, t))
+        minutes = max(1, round(until / 60))
+        self._restore_window_main_thread()
+        WarningDialog(self, languages.get_text("curfew_warning", self.current_lang).format(
+            minutes=minutes, start=curfew["start"]))
+
+    def _enforce_curfew(self, curfew):
+        """사용 금지 시간대가 시작됨: 실행 중인 타이머를 멈추고 유예 경고 후 종료 동작을 실행합니다."""
+        if self.timer and self.timer.running:
+            used_seconds = self.initial_duration - self.timer.remaining
+            if used_seconds > 0:
+                utils.save_log(used_seconds, self.timer_type, self.timer_target)
+            self.timer.stop()
+        self.timer = None
+        utils.clear_timer_state()
+
+        action = utils.load_settings().get("action", self.action_var.get())
+        if action == "kill_game":
+            action = "lock"  # 금지 시간대는 게임이 아니라 PC 사용 자체를 막음
+        self._timer_action = action
+        self.show_curfew_screen(curfew)
+        self._arm_expire_action(action)
+        self._show_grace_warning()
+
+    def show_curfew_screen(self, curfew):
+        self.clear_container()
+        ctk.CTkLabel(self.container, text="🌙", font=("Arial", 48)).pack(pady=(40, 10))
+        ctk.CTkLabel(self.container, text=languages.get_text("curfew_active", self.current_lang).format(
+            start=curfew["start"], end=curfew["end"]),
+            font=("Arial", 16, "bold"), text_color="#FF5555", wraplength=320).pack(pady=20)
+        ctk.CTkButton(self.container, text=languages.get_text("stop_timer", self.current_lang), command=self.prompt_stop_timer, fg_color="red").pack(pady=40, fill="x")
+
     def show_blocked_screen(self, target):
         self.clear_container()
         ctk.CTkLabel(self.container, text="🚫", font=("Arial", 48)).pack(pady=(40, 10))
@@ -869,7 +1009,7 @@ class GameTimerApp(ctk.CTk):
         # Close any existing grace dialog just in case
         if self.grace_dialog:
             try:
-                self.grace_dialog.destroy()
+                close_window(self.grace_dialog)
             except Exception:
                 pass
             self.grace_dialog = None
@@ -907,6 +1047,11 @@ class GameTimerApp(ctk.CTk):
         self.timer = None
         utils.clear_timer_state()
         self._stop_enforcement()
+
+        # 금지 시간대 중에 비밀번호로 중지했다면 이번 구간이 끝날 때까지는 다시 막지 않음
+        window = utils.curfew_window()
+        if window:
+            self._curfew_override_until = window[1]
 
     def prompt_stop_timer(self):
         if self._verify_password():

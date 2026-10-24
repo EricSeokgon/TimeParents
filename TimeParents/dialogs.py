@@ -2,6 +2,21 @@ import customtkinter as ctk
 import languages
 import utils
 
+SAFE_DESTROY_DELAY_MS = 500
+
+
+def close_window(win):
+    """창을 즉시 숨기고 잠시 뒤에 파괴합니다.
+
+    CTkToplevel은 생성 직후(약 200ms) 제목 표시줄 설정 콜백을 예약하므로,
+    그 전에 바로 destroy하면 Tk가 비정상 종료(access violation)될 수 있습니다.
+    """
+    try:
+        win.withdraw()
+        win.master.after(SAFE_DESTROY_DELAY_MS, lambda: win.winfo_exists() and win.destroy())
+    except Exception:
+        pass
+
 
 class WarningDialog(ctk.CTkToplevel):
     """메인 루프를 막지 않는 알림 창 (messagebox는 열어 둔 채 방치하면 타이머 동작이 멈춤)."""
@@ -21,7 +36,7 @@ class WarningDialog(ctk.CTkToplevel):
         label.pack(pady=30, padx=20)
         
         # 확인 버튼
-        btn = ctk.CTkButton(self, text=languages.get_text("confirm", parent.current_lang), command=self.destroy, width=100)
+        btn = ctk.CTkButton(self, text=languages.get_text("confirm", parent.current_lang), command=lambda: close_window(self), width=100)
         btn.pack(pady=10)
         
         # 10초 후 자동 닫힘
@@ -29,7 +44,7 @@ class WarningDialog(ctk.CTkToplevel):
 
     def _auto_close(self):
         if self.winfo_exists():
-            self.destroy()
+            close_window(self)
 
 
 class GraceWarningDialog(ctk.CTkToplevel):
@@ -69,7 +84,7 @@ class GraceWarningDialog(ctk.CTkToplevel):
     def execute_action(self):
         self._timer_id = None
         self.parent.grace_dialog = None
-        self.destroy()
+        close_window(self)
         self.parent.execute_expire_action(self.action)
 
     def cancel_dialog(self):
@@ -77,7 +92,7 @@ class GraceWarningDialog(ctk.CTkToplevel):
             self.after_cancel(self._timer_id)
             self._timer_id = None
         self.parent.grace_dialog = None
-        self.destroy()
+        close_window(self)
 
 
 class PasswordDialog(ctk.CTkToplevel):
