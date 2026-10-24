@@ -16,7 +16,7 @@ import threading
 import re
 import time
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 
 GRACE_SECONDS = 60
 RELOCK_INTERVAL_MS = 60 * 1000  # 잠금 동작 후 비밀번호로 중지할 때까지 재잠금 주기
@@ -25,6 +25,10 @@ GAME_BLOCK_INTERVAL = 3  # 게임 차단 중 프로세스 확인 주기 (초)
 CURFEW_CHECK_MS = 15 * 1000  # 사용 금지 시간대 확인 주기
 CURFEW_FIRST_CHECK_MS = 3 * 1000
 CURFEW_WARNINGS = (600, 300, 60)  # 금지 시간 시작 전 경고 (10분, 5분, 1분 전)
+WINDOW_HEIGHT = 580  # 메인·설정 화면이 스크롤 없이 들어가는 높이
+CARD_COLOR = ("white", "gray20")  # 바탕과 구분되는 카드 배경 (라이트, 다크)
+# 시간 종료 후 동작: (저장 값, 표시 문구 키)
+ACTIONS = (("shutdown", "shutdown"), ("logoff", "logoff"), ("lock", "lock"), ("kill_game", "kill_game_option"))
 
 # Load theme before creating app
 current_theme = utils.load_theme()
@@ -32,9 +36,12 @@ ctk.set_appearance_mode(current_theme)
 ctk.set_default_color_theme("blue")
 
 def create_tray_icon_image():
-    """시스템 트레이 아이콘으로 사용할 64x64 시계 모양 이미지를 생성합니다."""
+    """시스템 트레이 아이콘 이미지. 앱 아이콘 파일이 없으면 64x64 시계 모양을 직접 그립니다."""
     try:
-        # Create a 64x64 icon resembling a blue clock for TimeParents
+        return Image.open(utils.ICON_PNG).resize((64, 64), Image.LANCZOS)
+    except Exception:
+        pass
+    try:
         image = Image.new('RGB', (64, 64), color='#3B8ED0')
         dc = ImageDraw.Draw(image)
         # Outer circle
@@ -53,8 +60,13 @@ class GameTimerApp(ctk.CTk):
 
         self.current_lang = utils.load_language()
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
+        try:
+            # default로 지정하면 대화상자·통계 창에도 같은 아이콘이 적용됩니다.
+            self.iconbitmap(utils.ICON_ICO, default=utils.ICON_ICO)
+        except Exception:
+            pass
         # 작은 화면(768p 노트북 등)에서는 창 높이를 줄이고 내용은 스크롤로 봅니다.
-        height = min(920, self.winfo_screenheight() - 100)
+        height = min(WINDOW_HEIGHT, self.winfo_screenheight() - 100)
         self.geometry(f"420x{height}")
         self.resizable(False, True)
 
@@ -75,7 +87,7 @@ class GameTimerApp(ctk.CTk):
         self.timer_exact = True
         self.initial_duration = 0
 
-        self.container = ctk.CTkScrollableFrame(self)
+        self.container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.container.pack(fill="both", expand=True, padx=20, pady=20)
 
         self.tray_icon = None
@@ -215,58 +227,40 @@ class GameTimerApp(ctk.CTk):
     def show_dashboard(self):
         self.clear_container()
 
-        ctk.CTkLabel(self.container, text=languages.get_text("game_time_settings", self.current_lang), font=("Arial", 24, "bold")).pack(pady=10)
+        # 상단: 제목 + 통계/설정 아이콘 버튼
+        header = ctk.CTkFrame(self.container, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(header, text=languages.get_text("game_time_settings", self.current_lang),
+                     font=("Arial", 20, "bold")).pack(side="left")
+        self._icon_button(header, "⚙", self._open_settings).pack(side="right")
+        self._icon_button(header, "📊", self.show_statistics).pack(side="right", padx=(0, 6))
 
-        # Tab View
-        self.tab_view = ctk.CTkTabview(self.container)
-        self.tab_view.pack(pady=10, fill="x")
-        
+        self._build_status_card()
+
+        # 모드 탭 (기본 높이 250은 너무 커서 내용에 맞게 줄임)
+        self.tab_view = ctk.CTkTabview(self.container, height=168, fg_color=CARD_COLOR)
+        self.tab_view.pack(fill="x", pady=(4, 0))
+
         self.tab_game = self.tab_view.add(languages.get_text("tab_game", self.current_lang))
         self.tab_duration = self.tab_view.add(languages.get_text("tab_countdown", self.current_lang))
         self.tab_schedule = self.tab_view.add(languages.get_text("tab_schedule", self.current_lang))
-        
-        # Tab 1: Duration
-        time_frame = ctk.CTkFrame(self.tab_duration, fg_color="transparent")
-        time_frame.pack(pady=20)
-        
-        self.hour_entry = ctk.CTkEntry(time_frame, width=60, placeholder_text="0")
-        self.hour_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(time_frame, text=languages.get_text("hours", self.current_lang)).pack(side="left")
-        
-        self.min_entry = ctk.CTkEntry(time_frame, width=60, placeholder_text="0")
-        self.min_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(time_frame, text=languages.get_text("minutes", self.current_lang)).pack(side="left")
 
-        # Tab 2: Schedule
-        schedule_frame = ctk.CTkFrame(self.tab_schedule, fg_color="transparent")
-        schedule_frame.pack(pady=20)
-        
-        self.target_hour_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text="22")
-        self.target_hour_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(schedule_frame, text=languages.get_text("hour", self.current_lang)).pack(side="left")
-        
-        self.target_min_entry = ctk.CTkEntry(schedule_frame, width=60, placeholder_text=languages.get_text("minute", self.current_lang))
-        self.target_min_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(schedule_frame, text=languages.get_text("minute", self.current_lang)).pack(side="left")
-        
-        # Time picker button
-        ctk.CTkButton(self.tab_schedule, text=languages.get_text("time_picker", self.current_lang), command=self.open_time_picker, width=150).pack(pady=10)
-        
-        ctk.CTkLabel(self.tab_schedule, text=languages.get_text("schedule_note", self.current_lang), font=("Arial", 12), text_color="gray").pack()
+        # 카운트다운
+        self.hour_entry, self.min_entry = self._make_hm_row(self.tab_duration, "hours", "minutes", "0", "0")
+        self.hour_entry.master.pack(pady=(24, 0))
 
-        # Tab 3: Specific Game
-        game_frame = ctk.CTkFrame(self.tab_game, fg_color="transparent")
-        game_frame.pack(pady=20)
+        # 특정 시간
+        self.target_hour_entry, self.target_min_entry = self._make_hm_row(
+            self.tab_schedule, "hour", "minute", "22", languages.get_text("minute", self.current_lang))
+        schedule_row = self.target_hour_entry.master
+        schedule_row.pack(pady=(10, 0))
+        ctk.CTkButton(schedule_row, text="🕐", width=36, command=self.open_time_picker).pack(side="left", padx=(10, 0))
+        ctk.CTkLabel(self.tab_schedule, text=languages.get_text("schedule_note", self.current_lang),
+                     font=("Arial", 12), text_color="gray").pack(pady=(8, 0))
 
-        self.game_hour_entry = ctk.CTkEntry(game_frame, width=60, placeholder_text="0")
-        self.game_hour_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(game_frame, text=languages.get_text("hours", self.current_lang)).pack(side="left")
-
-        self.game_min_entry = ctk.CTkEntry(game_frame, width=60, placeholder_text="0")
-        self.game_min_entry.pack(side="left", padx=5)
-        ctk.CTkLabel(game_frame, text=languages.get_text("minutes", self.current_lang)).pack(side="left")
-
-        ctk.CTkLabel(self.tab_game, text=languages.get_text("game_process_name", self.current_lang), font=("Arial", 12)).pack(pady=(10, 5))
+        # 특정 게임
+        self.game_hour_entry, self.game_min_entry = self._make_hm_row(self.tab_game, "hours", "minutes", "0", "0")
+        self.game_hour_entry.master.pack(pady=(6, 0))
         presets = [
             "Roblox (RobloxPlayerBeta)",
             "Minecraft (javaw)",
@@ -277,105 +271,146 @@ class GameTimerApp(ctk.CTk):
             "Nexon Launcher (NexonLauncher)",
             "MapleStory (maplestory)"
         ]
-        self.game_name_combobox = ctk.CTkComboBox(self.tab_game, values=presets, width=250)
+        self.game_name_combobox = ctk.CTkComboBox(self.tab_game, values=presets, width=280)
         self.game_name_combobox.set("Roblox (RobloxPlayerBeta)")
-        self.game_name_combobox.pack(pady=10)
-        
-        ctk.CTkLabel(self.tab_game, text=languages.get_text("game_note", self.current_lang), font=("Arial", 12), text_color="gray").pack()
+        self.game_name_combobox.pack(pady=(8, 0))
+        ctk.CTkLabel(self.tab_game, text=languages.get_text("game_note", self.current_lang),
+                     font=("Arial", 12), text_color="gray").pack(pady=(4, 0))
 
-        # Daily Limit Section
-        daily_frame = ctk.CTkFrame(self.container)
-        daily_frame.pack(pady=10, fill="x")
+        # 시간 종료 후 동작: 라디오 4개 대신 한 줄 드롭다운
+        action_row = ctk.CTkFrame(self.container, fg_color="transparent")
+        action_row.pack(fill="x", pady=(12, 0))
+        ctk.CTkLabel(action_row, text=languages.get_text("action_after_time", self.current_lang)).pack(side="left")
+        self._action_labels = {key: languages.get_text(label_key, self.current_lang) for key, label_key in ACTIONS}
+        self.action_menu = ctk.CTkOptionMenu(action_row, values=list(self._action_labels.values()), width=190,
+                                             command=self._on_action_selected)
+        self.action_menu.pack(side="right")
+        self._sync_action_menu()
 
-        ctk.CTkLabel(daily_frame, text=languages.get_text("daily_limit", self.current_lang), font=("Arial", 13, "bold")).pack(pady=(5, 2))
+        ctk.CTkButton(self.container, text=languages.get_text("start_timer", self.current_lang), command=self.start_timer,
+                      fg_color="green", hover_color="#1E7B34", height=46, font=("Arial", 16, "bold")).pack(pady=(18, 0), fill="x")
 
+        self.load_saved_settings()
+
+    def _icon_button(self, parent, text, command):
+        return ctk.CTkButton(parent, text=text, width=36, height=32, font=("Arial", 16), command=command,
+                             fg_color="transparent", hover_color=("gray80", "gray30"), text_color=("gray10", "gray90"))
+
+    def _make_hm_row(self, parent, h_key, m_key, h_placeholder, m_placeholder):
+        """[시] 시간 [분] 분 입력 줄을 만들고 두 입력칸을 반환합니다 (줄 배치는 호출하는 쪽에서)."""
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        h_entry = ctk.CTkEntry(row, width=60, placeholder_text=h_placeholder)
+        h_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(row, text=languages.get_text(h_key, self.current_lang)).pack(side="left")
+        m_entry = ctk.CTkEntry(row, width=60, placeholder_text=m_placeholder)
+        m_entry.pack(side="left", padx=5)
+        ctk.CTkLabel(row, text=languages.get_text(m_key, self.current_lang)).pack(side="left")
+        return h_entry, m_entry
+
+    def _build_status_card(self):
+        """오늘 남은 허용 시간과 사용 금지 시간대를 한눈에 보여 주는 요약."""
+        card = ctk.CTkFrame(self.container, corner_radius=10, fg_color=CARD_COLOR)
+        card.pack(fill="x", pady=(0, 4))
+        daily_remaining = utils.get_daily_remaining()
+        if daily_remaining >= 0:
+            text = languages.get_text("daily_remaining", self.current_lang).format(
+                time=languages.format_hm(daily_remaining, self.current_lang))
+            color = "#3B8ED0" if daily_remaining > 0 else "#FF5555"
+        else:
+            text, color = languages.get_text("status_no_limit", self.current_lang), "gray"
+        self.daily_remaining_label = ctk.CTkLabel(card, text="⏱  " + text, text_color=color, font=("Arial", 13, "bold"))
+        self.daily_remaining_label.pack(anchor="w", padx=12, pady=8)
+        curfew = utils.load_curfew()
+        if curfew["enabled"]:
+            self.daily_remaining_label.pack_configure(pady=(8, 0))
+            ctk.CTkLabel(card, text="🌙  " + languages.get_text("status_curfew", self.current_lang).format(
+                start=curfew["start"], end=curfew["end"]), font=("Arial", 12), text_color="gray").pack(anchor="w", padx=12, pady=(0, 8))
+
+    def _on_action_selected(self, label):
+        for key, text in self._action_labels.items():
+            if text == label:
+                self.action_var.set(key)
+
+    def _sync_action_menu(self):
+        menu = getattr(self, "action_menu", None)
+        if menu is not None and menu.winfo_exists():
+            menu.set(self._action_labels.get(self.action_var.get(), self._action_labels["shutdown"]))
+
+    def show_settings(self):
+        """사용 제한·금지 시간대·일반 설정 화면. 값 변경은 각각 비밀번호 확인 후 저장됩니다."""
+        self.clear_container()
+
+        header = ctk.CTkFrame(self.container, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 8))
+        self._icon_button(header, "←", self.show_dashboard).pack(side="left")
+        ctk.CTkLabel(header, text=languages.get_text("settings", self.current_lang), font=("Arial", 20, "bold")).pack(side="left", padx=6)
+
+        # 일일 사용 제한
+        daily_frame = self._section(languages.get_text("daily_limit", self.current_lang))
         self.daily_limit_var = ctk.BooleanVar(value=utils.load_daily_limit() > 0)
         ctk.CTkCheckBox(daily_frame, text=languages.get_text("daily_limit_enable", self.current_lang),
-                        variable=self.daily_limit_var, command=self._on_daily_limit_toggled).pack(pady=2)
-
+                        variable=self.daily_limit_var, command=self._on_daily_limit_toggled).pack(anchor="w", padx=12, pady=2)
         weekend_limit = utils.load_weekend_limit()
         self.weekday_label, self.daily_h_entry, self.daily_m_entry = self._make_limit_row(daily_frame, utils.load_daily_limit())
-
-        # 주말(토·일) 별도 제한
         self.weekend_var = ctk.BooleanVar(value=weekend_limit > 0)
         self.weekend_checkbox = ctk.CTkCheckBox(daily_frame, text=languages.get_text("weekend_separate", self.current_lang),
                                                 variable=self.weekend_var, command=self._on_weekend_toggled)
-        self.weekend_checkbox.pack(pady=2)
+        self.weekend_checkbox.pack(anchor="w", padx=12, pady=2)
         self.weekend_label, self.weekend_h_entry, self.weekend_m_entry = self._make_limit_row(daily_frame, weekend_limit)
         self.weekend_label.configure(text=languages.get_text("weekend", self.current_lang))
-
-        # 오늘 남은 허용 시간 표시
-        daily_remaining = utils.get_daily_remaining()
-        if daily_remaining >= 0:
-            remaining_str = languages.format_hm(daily_remaining, self.current_lang)
-            self.daily_remaining_label = ctk.CTkLabel(daily_frame,
-                text=languages.get_text("daily_remaining", self.current_lang).format(time=remaining_str),
-                font=("Arial", 12), text_color="#3B8ED0")
-            self.daily_remaining_label.pack(pady=2)
-
+        self.limit_save_btn = ctk.CTkButton(daily_frame, text=languages.get_text("save", self.current_lang), width=70,
+                                            command=self._on_limit_save)
+        self.limit_save_btn.pack(anchor="e", padx=12, pady=(2, 10))
         self._apply_daily_limit_state()
 
-        # Curfew Section (사용 금지 시간대)
+        # 사용 금지 시간대
         curfew = utils.load_curfew()
-        curfew_frame = ctk.CTkFrame(self.container)
-        curfew_frame.pack(pady=10, fill="x")
-        ctk.CTkLabel(curfew_frame, text=languages.get_text("curfew", self.current_lang), font=("Arial", 13, "bold")).pack(pady=(5, 2))
+        curfew_frame = self._section(languages.get_text("curfew", self.current_lang))
         self.curfew_var = ctk.BooleanVar(value=curfew["enabled"])
         ctk.CTkCheckBox(curfew_frame, text=languages.get_text("curfew_enable", self.current_lang),
-                        variable=self.curfew_var, command=self._on_curfew_toggled).pack(pady=2)
+                        variable=self.curfew_var, command=self._on_curfew_toggled).pack(anchor="w", padx=12, pady=2)
         curfew_row = ctk.CTkFrame(curfew_frame, fg_color="transparent")
-        curfew_row.pack(pady=5)
+        curfew_row.pack(fill="x", padx=12, pady=5)
         self.curfew_start_entry = ctk.CTkEntry(curfew_row, width=70, placeholder_text="21:00")
         self.curfew_start_entry.insert(0, curfew["start"])
-        self.curfew_start_entry.pack(side="left", padx=3)
-        ctk.CTkLabel(curfew_row, text="~").pack(side="left", padx=3)
+        self.curfew_start_entry.pack(side="left")
+        ctk.CTkLabel(curfew_row, text="~").pack(side="left", padx=6)
         self.curfew_end_entry = ctk.CTkEntry(curfew_row, width=70, placeholder_text="07:00")
         self.curfew_end_entry.insert(0, curfew["end"])
-        self.curfew_end_entry.pack(side="left", padx=3)
-        self.curfew_save_btn = ctk.CTkButton(curfew_row, text=languages.get_text("save", self.current_lang), width=60, command=self._on_curfew_save)
-        self.curfew_save_btn.pack(side="left", padx=(8, 0))
-        ctk.CTkLabel(curfew_frame, text=languages.get_text("curfew_note", self.current_lang), font=("Arial", 11), text_color="gray").pack(pady=(0, 5))
+        self.curfew_end_entry.pack(side="left")
+        self.curfew_save_btn = ctk.CTkButton(curfew_row, text=languages.get_text("save", self.current_lang), width=70, command=self._on_curfew_save)
+        self.curfew_save_btn.pack(side="right")
+        ctk.CTkLabel(curfew_frame, text=languages.get_text("curfew_note", self.current_lang), font=("Arial", 11),
+                     text_color="gray", wraplength=330, justify="left").pack(anchor="w", padx=12, pady=(0, 10))
         self._apply_curfew_state()
 
-        # Action Selection
-        ctk.CTkLabel(self.container, text=languages.get_text("action_after_time", self.current_lang)).pack(pady=(10, 5))
-        ctk.CTkRadioButton(self.container, text=languages.get_text("shutdown", self.current_lang), variable=self.action_var, value="shutdown").pack(pady=5)
-        ctk.CTkRadioButton(self.container, text=languages.get_text("logoff", self.current_lang), variable=self.action_var, value="logoff").pack(pady=5)
-        ctk.CTkRadioButton(self.container, text=languages.get_text("lock", self.current_lang), variable=self.action_var, value="lock").pack(pady=5)
-        ctk.CTkRadioButton(self.container, text=languages.get_text("kill_game_option", self.current_lang), variable=self.action_var, value="kill_game").pack(pady=5)
-
-        ctk.CTkButton(self.container, text=languages.get_text("start_timer", self.current_lang), command=self.start_timer, fg_color="green").pack(pady=20, fill="x")
-        
-        ctk.CTkButton(self.container, text=languages.get_text("password_change", self.current_lang), command=self.change_password_dialog, fg_color="gray").pack(pady=5, fill="x")
-        ctk.CTkButton(self.container, text=languages.get_text("about", self.current_lang), command=self.show_about_dialog, fg_color="gray").pack(pady=5, fill="x")
-        ctk.CTkButton(self.container, text=languages.get_text("statistics", self.current_lang), command=self.show_statistics, fg_color="#3B8ED0").pack(pady=5, fill="x")
-        
-        # Language Switcher
-        lang_frame = ctk.CTkFrame(self.container, fg_color="transparent")
-        lang_frame.pack(pady=5, fill="x")
-        
-        # Language
-        ctk.CTkLabel(lang_frame, text="🌐 " + languages.get_text("language", self.current_lang), width=60).pack(side="left", padx=5)
+        # 일반: 언어·테마, 비밀번호 변경, 만든이 소개
+        general = self._section(languages.get_text("general", self.current_lang))
+        prefs = ctk.CTkFrame(general, fg_color="transparent")
+        prefs.pack(fill="x", padx=12, pady=(2, 6))
+        ctk.CTkLabel(prefs, text="🌐").pack(side="left")
         self.lang_var = ctk.StringVar(value=self.current_lang)
-        lang_menu = ctk.CTkOptionMenu(lang_frame, variable=self.lang_var, 
-                                      values=["ko", "en"],
-                                      command=self.change_language, width=100)
-        lang_menu.pack(side="left", padx=5)
-        
-        # Theme
-        ctk.CTkLabel(lang_frame, text="🎨 " + languages.get_text("theme", self.current_lang), width=60).pack(side="left", padx=(20, 5))
+        ctk.CTkOptionMenu(prefs, variable=self.lang_var, values=["ko", "en"], command=self.change_language, width=80).pack(side="left", padx=(4, 16))
+        ctk.CTkLabel(prefs, text="🎨").pack(side="left")
         self.theme_var = ctk.StringVar(value=utils.load_theme())
-        theme_menu = ctk.CTkOptionMenu(lang_frame, variable=self.theme_var,
-                                       values=["Dark", "Light"],
-                                       command=self.change_theme, width=100)
-        theme_menu.pack(side="left", padx=5)
+        ctk.CTkOptionMenu(prefs, variable=self.theme_var, values=["Dark", "Light"], command=self.change_theme, width=90).pack(side="left", padx=4)
+        buttons = ctk.CTkFrame(general, fg_color="transparent")
+        buttons.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(buttons, text=languages.get_text("password_change", self.current_lang), command=self.change_password_dialog,
+                      fg_color="gray").pack(side="left", expand=True, fill="x", padx=(0, 4))
+        ctk.CTkButton(buttons, text=languages.get_text("about", self.current_lang), command=self.show_about_dialog,
+                      fg_color="gray").pack(side="left", expand=True, fill="x", padx=(4, 0))
 
-        self.load_saved_settings()
+    def _section(self, title):
+        frame = ctk.CTkFrame(self.container, corner_radius=10, fg_color=CARD_COLOR)
+        frame.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(frame, text=title, font=("Arial", 13, "bold")).pack(anchor="w", padx=12, pady=(8, 2))
+        return frame
 
     def _make_limit_row(self, parent, seconds):
         """[라벨] [시간] 시간 [분] 분 형태의 입력 줄을 만들고 (라벨, 시간 입력, 분 입력)을 반환합니다."""
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(pady=3)
+        row.pack(anchor="w", padx=12, pady=3)
         label = ctk.CTkLabel(row, text="", width=40)
         label.pack(side="left", padx=(0, 5))
         h, m = divmod(seconds // 60, 60) if seconds > 0 else (0, 0)
@@ -400,6 +435,7 @@ class GameTimerApp(ctk.CTk):
         weekend_state = "normal" if weekend else "disabled"
         self.weekend_h_entry.configure(state=weekend_state)
         self.weekend_m_entry.configure(state=weekend_state)
+        self.limit_save_btn.configure(state=state)
         # 주말을 따로 설정할 때만 첫 줄에 '평일' 표시
         self.weekday_label.configure(text=languages.get_text("weekday", self.current_lang) if weekend else "")
 
@@ -473,6 +509,26 @@ class GameTimerApp(ctk.CTk):
         else:
             utils.save_weekend_limit(0)
 
+    def _on_limit_save(self):
+        """바꾼 평일/주말 제한 시간을 비밀번호 한 번 확인 후 저장합니다."""
+        try:
+            changes = []
+            limit_seconds = self._read_daily_limit_entries()
+            if limit_seconds > 0 and limit_seconds != utils.load_daily_limit():
+                changes.append((utils.save_daily_limit, limit_seconds))
+            if self.weekend_var.get():
+                weekend_seconds = self._read_limit_entries(self.weekend_h_entry, self.weekend_m_entry)
+                if weekend_seconds > 0 and weekend_seconds != utils.load_weekend_limit():
+                    changes.append((utils.save_weekend_limit, weekend_seconds))
+        except ValueError:
+            messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("enter_valid_time", self.current_lang))
+            return
+        if not changes or not self._verify_password():
+            return
+        for save, seconds in changes:
+            save(seconds)
+        WarningDialog(self, languages.get_text("limit_saved", self.current_lang), title_key="daily_limit", color="#3B8ED0")
+
     def _on_daily_limit_toggled(self):
         """일일 제한 켜기/끄기는 비밀번호 확인 후에만 저장합니다."""
         enabled = self.daily_limit_var.get()
@@ -501,7 +557,7 @@ class GameTimerApp(ctk.CTk):
         utils.save_language(choice)
         self.current_lang = choice
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
-        self.show_dashboard()
+        self.show_settings()
 
     def change_theme(self, choice):
         utils.save_theme(choice)
@@ -536,7 +592,9 @@ class GameTimerApp(ctk.CTk):
                 self.target_min_entry.delete(0, "end")
                 self.target_min_entry.insert(0, settings["schedule_m"])
             
-            if "action" in settings: self.action_var.set(settings["action"])
+            if "action" in settings:
+                self.action_var.set(settings["action"])
+                self._sync_action_menu()
             
             if settings.get("last_tab_key") in TAB_KEYS:
                 self.tab_view.set(languages.get_text(settings["last_tab_key"], self.current_lang))
@@ -599,6 +657,25 @@ class GameTimerApp(ctk.CTk):
     def show_statistics(self):
         stats_window.open_statistics(self)
 
+    def _form_settings(self):
+        """메인 화면에 입력한 값 (다시 그려도 유지되도록 설정 파일에 저장하는 항목)."""
+        return {
+            "last_tab_key": self._current_tab_key(),
+            "action": self.action_var.get(),
+            "game_h": self.game_hour_entry.get(),
+            "game_m": self.game_min_entry.get(),
+            "game_name": self.game_name_combobox.get(),
+            "duration_h": self.hour_entry.get(),
+            "duration_m": self.min_entry.get(),
+            "schedule_h": self.target_hour_entry.get(),
+            "schedule_m": self.target_min_entry.get()
+        }
+
+    def _open_settings(self):
+        # 설정 화면에서 돌아오면 메인 화면을 다시 그리므로 입력하던 값을 먼저 저장
+        utils.save_settings(dict(utils.load_settings(), **self._form_settings()))
+        self.show_settings()
+
     def start_timer(self):
         total_seconds = 0
         process_name = None
@@ -609,17 +686,7 @@ class GameTimerApp(ctk.CTk):
             tab_key = self._current_tab_key()
 
             # Save settings first (without losing the paused keys yet)
-            settings = {
-                "last_tab_key": tab_key,
-                "action": self.action_var.get(),
-                "game_h": self.game_hour_entry.get(),
-                "game_m": self.game_min_entry.get(),
-                "game_name": self.game_name_combobox.get(),
-                "duration_h": self.hour_entry.get(),
-                "duration_m": self.min_entry.get(),
-                "schedule_h": self.target_hour_entry.get(),
-                "schedule_m": self.target_min_entry.get()
-            }
+            settings = self._form_settings()
 
             # Load stored settings to check for paused timer to resume (중지한 날 당일에만 이어서 시작)
             saved_settings = utils.load_settings()
@@ -677,21 +744,6 @@ class GameTimerApp(ctk.CTk):
                 total_seconds = int((target - now).total_seconds())
                 end_at = target.timestamp()
 
-            # 일일/주말 제한 값을 바꿨다면 비밀번호 한 번 확인 후 저장
-            if self.daily_limit_var.get():
-                changes = []
-                limit_seconds = self._read_daily_limit_entries()
-                if limit_seconds > 0 and limit_seconds != utils.load_daily_limit():
-                    changes.append((utils.save_daily_limit, limit_seconds))
-                if self.weekend_var.get():
-                    weekend_seconds = self._read_limit_entries(self.weekend_h_entry, self.weekend_m_entry)
-                    if weekend_seconds > 0 and weekend_seconds != utils.load_weekend_limit():
-                        changes.append((utils.save_weekend_limit, weekend_seconds))
-                if changes and not self._verify_password():
-                    return
-            else:
-                changes = []
-
             # Clear paused keys from the saved dictionary
             for key in ("paused_remaining", "paused_type", "paused_date", "last_tab"):
                 saved_settings.pop(key, None)
@@ -699,10 +751,6 @@ class GameTimerApp(ctk.CTk):
             # Merge and save
             saved_settings.update(settings)
             utils.save_settings(saved_settings)
-
-            # 제한 시간은 위에서 저장한 설정을 덮어쓰지 않도록 마지막에 저장
-            for save, seconds in changes:
-                save(seconds)
 
         except ValueError:
             messagebox.showerror(languages.get_text("error", self.current_lang), languages.get_text("enter_valid_time", self.current_lang))
