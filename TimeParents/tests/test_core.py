@@ -5,6 +5,7 @@
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -458,6 +459,18 @@ class ResumeTests(unittest.TestCase):
         restarted._stop_timer()
         self.assertIsNone(utils.load_game_block())
         self.assertFalse(restarted._is_enforcing())
+
+
+class VersionTests(unittest.TestCase):
+    def test_readme_matches_version(self):
+        # 기능 추가 시 main.VERSION을 올리면 README 제목과 버전 기록도 함께 갱신해야 합니다.
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
+            version = re.search(r'^VERSION = "([\d.]+)"', f.read(), re.M).group(1)
+        with open(os.path.join(root, "README.md"), encoding="utf-8") as f:
+            readme = f.read()
+        self.assertIn(f"# TimeParents (타임페어런츠) v{version}", readme.splitlines()[0])
+        self.assertIn(f"- **v{version}**", readme)
 
 
 if __name__ == "__main__":

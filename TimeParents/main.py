@@ -16,7 +16,7 @@ import threading
 import re
 import time
 
-VERSION = "1.5.0"
+VERSION = "1.8.0"
 
 GRACE_SECONDS = 60
 RELOCK_INTERVAL_MS = 60 * 1000  # 잠금 동작 후 비밀번호로 중지할 때까지 재잠금 주기
