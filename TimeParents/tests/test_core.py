@@ -516,7 +516,7 @@ class ResumeTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_readme_matches_version(self):
-        # 기능 추가 시 main.VERSION을 올리면 README 제목과 버전 기록도 함께 갱신해야 합니다.
+        # 기능 추가 시 main.VERSION을 올리면 README 제목과 버전 기록, 저장소 루트 README 제목도 함께 갱신해야 합니다.
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(root, "main.py"), encoding="utf-8") as f:
             version = re.search(r'^VERSION = "([\d.]+)"', f.read(), re.M).group(1)
@@ -524,6 +524,9 @@ class VersionTests(unittest.TestCase):
             readme = f.read()
         self.assertIn(f"# TimeParents (타임페어런츠) v{version}", readme.splitlines()[0])
         self.assertIn(f"- **v{version}**", readme)
+        # GitHub 첫 화면에 보이는 저장소 루트 README의 제목도 같은 버전이어야 합니다.
+        with open(os.path.join(os.path.dirname(root), "README.md"), encoding="utf-8") as f:
+            self.assertIn(f"# 타임페어런츠 (TimeParents) v{version}\n", f.read())
 
 
 if __name__ == "__main__":
