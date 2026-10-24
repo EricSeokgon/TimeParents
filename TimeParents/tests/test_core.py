@@ -290,6 +290,9 @@ class ResumeTests(unittest.TestCase):
         app._stop_enforcement()
         cls._drain(app)
         try:
+            # 남은 after 작업이 다음 테스트의 이벤트 루프에서 파괴된 창을 호출하지 않도록 취소
+            for job in app.tk.splitlist(app.tk.call("after", "info")):
+                app.after_cancel(job)
             app.destroy()
         except Exception:
             pass  # 테스트에서 이미 닫은 창
@@ -387,6 +390,33 @@ class ResumeTests(unittest.TestCase):
         app._enforce_curfew({"enabled": True, "start": "21:00", "end": "07:00"})
         self.assertIsNone(app.timer)
         self.assertEqual(utils.load_logs()[before]["duration"], 600)
+
+    def test_quit_needs_password_while_curfew_enabled(self):
+        app = self._plain_app()
+        quits = []
+        app.quit_app = lambda: quits.append(True)
+        utils.save_curfew(True, "21:00", "07:00")
+
+        app.on_closing()  # X 버튼: 타이머가 없어도 트레이로 숨기기만 함
+        self.assertEqual(quits, [])
+        self.assertFalse(app.winfo_viewable())
+
+        app._verify_password = lambda: False
+        app._restore_and_quit_app()  # 트레이 "종료": 비밀번호가 틀리면 계속 실행
+        self.assertEqual(quits, [])
+
+        app._verify_password = lambda: True
+        app._restore_and_quit_app()
+        self.assertEqual(quits, [True])
+
+    def test_quit_without_password_when_nothing_enforced(self):
+        app = self._plain_app()
+        quits = []
+        app.quit_app = lambda: quits.append(True)
+        app._verify_password = lambda: self.fail("password should not be asked")
+        app.on_closing()
+        app._restore_and_quit_app()
+        self.assertEqual(quits, [True, True])
 
     def test_curfew_warning_shows_nearest_only_once(self):
         shown = []

@@ -998,6 +998,10 @@ class GameTimerApp(ctk.CTk):
         return bool((self.timer and self.timer.running) or self.grace_dialog is not None
                     or self._relock_job or self._game_block_job)
 
+    def _quit_needs_password(self):
+        # 금지 시간대는 앱이 켜져 있어야 적용되므로, 켜져 있으면 타이머가 없어도 종료를 막음
+        return self._is_enforcing() or utils.load_curfew().get("enabled", False)
+
     def _show_grace_warning(self):
         """유예 경고를 표시합니다. (동작 자체는 _arm_expire_action에서 이미 예약됨)"""
         self.deiconify()
@@ -1091,7 +1095,7 @@ class GameTimerApp(ctk.CTk):
 
     def _restore_and_quit_app(self):
         self._restore_window_main_thread()
-        if self._is_enforcing():
+        if self._quit_needs_password():
             self.prompt_stop_and_quit()
         else:
             self.quit_app()
@@ -1111,7 +1115,7 @@ class GameTimerApp(ctk.CTk):
         sys.exit(0)
 
     def on_closing(self):
-        if self._is_enforcing():
+        if self._quit_needs_password():
             self.withdraw()
             try:
                 self.tray_icon.notify(
