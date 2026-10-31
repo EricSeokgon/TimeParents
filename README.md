@@ -2,7 +2,7 @@
   <img src="TimeParents/assets/icon.png" width="96" alt="TimeParents 아이콘">
 </p>
 
-# 타임페어런츠 (TimeParents) v1.9.0
+# 타임페어런츠 (TimeParents) v1.9.1
 
 자녀의 PC·게임 사용 시간을 관리하는 Windows용 자녀 보호 프로그램입니다.
 

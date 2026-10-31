@@ -380,6 +380,29 @@ class ResumeTests(unittest.TestCase):
         self.assertEqual(results, dict.fromkeys(
             ["refused", "enforced", "once_per_window", "stopped", "not_reenforced", "start_allowed_after_override"], True))
 
+    def test_replaced_timer_does_not_log_twice(self):
+        app = self._plain_app()
+        app.initial_duration, app.timer_type, app.timer_target = 1, "countdown", None
+        old = app._create_timer(1)
+        app.timer = old
+        old.start()
+        app.timer = app._create_timer(100)  # 이전 타이머가 끝나기 전에 교체됨
+        old._thread.join(5)
+        self.assertEqual(utils.load_logs(), [])  # 교체된 타이머의 완료는 기록하지 않음
+
+    def test_starting_again_stops_previous_timer(self):
+        self.main.messagebox.showinfo = lambda *a, **k: None
+        app = self._plain_app()
+        app.show_timer_screen = lambda: None  # 대시보드 입력칸을 유지한 채 두 번 시작
+        app.tab_view.set(languages.get_text("tab_countdown", app.current_lang))
+        app.min_entry.insert(0, "10")
+        app.start_timer()
+        first = app.timer
+        app.start_timer()
+        self.assertIsNot(app.timer, first)
+        first._thread.join(2)
+        self.assertFalse(first._thread.is_alive())
+
     def test_curfew_stops_running_timer_and_logs_usage(self):
         app = self._plain_app()
         app.timer = timer_logic.GameTimer(1800)
@@ -512,6 +535,32 @@ class ResumeTests(unittest.TestCase):
         restarted._stop_timer()
         self.assertIsNone(utils.load_game_block())
         self.assertFalse(restarted._is_enforcing())
+
+
+@unittest.skipUnless(sys.platform == "win32", "Windows only")
+class SingleInstanceTests(unittest.TestCase):
+    """두 개가 동시에 실행되면 같은 타이머가 두 번 돌아 사용 기록이 두 번 남던 문제 (v1.9.1)."""
+
+    def test_second_process_is_not_primary_and_signals_first(self):
+        import subprocess
+        import single_instance
+        name = f"Local\\TimeParents_Test_{os.getpid()}_{time.time_ns()}"
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        code = ("import sys, single_instance as s; "
+                "i = s.SingleInstance(sys.argv[1], sys.argv[1] + '_show'); "
+                "print(i.is_primary); i.notify_primary() if not i.is_primary else None")
+        first = single_instance.SingleInstance(name, name + "_show")
+        try:
+            self.assertTrue(first.is_primary)
+            out = subprocess.run([sys.executable, "-c", code, name], cwd=repo, capture_output=True, text=True, timeout=30)
+            self.assertEqual(out.stdout.strip(), "False")
+            self.assertTrue(first.show_requested())
+            self.assertFalse(first.show_requested())  # 신호는 한 번만 소비
+        finally:
+            first.close()
+        # 첫 번째가 끝나면 다음 실행은 다시 첫 번째가 됨
+        out = subprocess.run([sys.executable, "-c", code, name], cwd=repo, capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.stdout.strip(), "True")
 
 
 class VersionTests(unittest.TestCase):

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import webbrowser
 import languages
 import stats_window
+import single_instance
 from dialogs import close_window, WarningDialog, GraceWarningDialog, PasswordDialog, TimePickerDialog
 import pystray
 from PIL import Image, ImageDraw
@@ -16,7 +17,7 @@ import threading
 import re
 import time
 
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 
 GRACE_SECONDS = 60
 RELOCK_INTERVAL_MS = 60 * 1000  # 잠금 동작 후 비밀번호로 중지할 때까지 재잠금 주기
@@ -25,6 +26,7 @@ GAME_BLOCK_INTERVAL = 3  # 게임 차단 중 프로세스 확인 주기 (초)
 CURFEW_CHECK_MS = 15 * 1000  # 사용 금지 시간대 확인 주기
 CURFEW_FIRST_CHECK_MS = 3 * 1000
 CURFEW_WARNINGS = (600, 300, 60)  # 금지 시간 시작 전 경고 (10분, 5분, 1분 전)
+SHOW_REQUEST_POLL_MS = 500  # 두 번째 실행의 창 표시 요청 확인 주기
 WINDOW_HEIGHT = 580  # 메인·설정 화면이 스크롤 없이 들어가는 높이
 CARD_COLOR = ("white", "gray20")  # 바탕과 구분되는 카드 배경 (라이트, 다크)
 # 시간 종료 후 동작: (저장 값, 표시 문구 키)
@@ -55,8 +57,9 @@ def create_tray_icon_image():
         return Image.new('RGB', (64, 64), color='blue')
 
 class GameTimerApp(ctk.CTk):
-    def __init__(self):
+    def __init__(self, instance=None):
         super().__init__()
+        self._instance = instance
 
         self.current_lang = utils.load_language()
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
@@ -119,6 +122,10 @@ class GameTimerApp(ctk.CTk):
 
         # 사용 금지 시간대 감시 (타이머 실행 여부와 관계없이 동작)
         self.after(CURFEW_FIRST_CHECK_MS, self._check_curfew)
+
+        # 이미 실행 중일 때 exe를 다시 실행하면 새로 뜨지 않고 이 창을 앞으로 꺼냄
+        if self._instance:
+            self.after(SHOW_REQUEST_POLL_MS, self._poll_show_request)
 
     def clear_container(self):
         for widget in self.container.winfo_children():
@@ -209,6 +216,8 @@ class GameTimerApp(ctk.CTk):
 
         # 타이머 복원
         self.timer_exact = state.get("exact", True)
+        if self.timer:
+            self.timer.stop()
         self.timer = self._create_timer(remaining, target, self.timer_end_at, self.timer_exact)
         self.timer.start()
         self.show_timer_screen()
@@ -796,6 +805,8 @@ class GameTimerApp(ctk.CTk):
         self._timer_action = self.action_var.get()
         self._stop_enforcement()
 
+        if self.timer:
+            self.timer.stop()  # 이전 타이머가 남아 함께 돌지 않도록
         self.timer = self._create_timer(total_seconds, process_name, end_at, exact)
         self.timer.start()
 
@@ -824,8 +835,20 @@ class GameTimerApp(ctk.CTk):
         # Mini mode hint
         ctk.CTkLabel(self.container, text=languages.get_text("timer_running_note", self.current_lang), font=("Arial", 12), text_color="gray").pack(side="bottom", pady=10)
 
+    def _poll_show_request(self):
+        if self._instance.show_requested():
+            self._restore_window_main_thread()
+        self.after(SHOW_REQUEST_POLL_MS, self._poll_show_request)
+
+    def _is_current_timer_thread(self):
+        """타이머 콜백이 현재 타이머에서 온 것인지 확인합니다 (교체된 이전 타이머의 늦은 콜백 무시)."""
+        timer = self.timer
+        return timer is not None and threading.current_thread() is timer._thread
+
     def update_timer_display(self, time_str):
         # 타이머 스레드에서 호출되므로 UI 갱신은 메인 스레드로 넘깁니다 (Tkinter는 스레드 안전하지 않음)
+        if not self._is_current_timer_thread():
+            return
         timer = self.timer
         if timer:
             remaining = timer.remaining
@@ -844,6 +867,8 @@ class GameTimerApp(ctk.CTk):
             label.configure(text=time_str)
 
     def on_warning(self, remaining_seconds):
+        if not self._is_current_timer_thread():
+            return
         # Use after() to schedule the warning dialog in the main thread
         # This prevents blocking the timer thread
         self.after(0, self._show_warning_dialog, remaining_seconds)
@@ -862,6 +887,8 @@ class GameTimerApp(ctk.CTk):
     def on_timer_finish(self):
         # 타이머 스레드에서 호출됨. 메인 루프가 열린 창 등으로 막혀 있어도
         # 만료 동작이 반드시 실행되도록 여기서 먼저 예약합니다.
+        if not self._is_current_timer_thread():
+            return  # 이미 교체된 타이머 → 사용 기록이 두 번 남지 않도록 무시
         utils.clear_timer_state()
         utils.save_log(self.initial_duration, self.timer_type, self.timer_target)
         self._arm_expire_action(self._timer_action)
@@ -1176,6 +1203,11 @@ class GameTimerApp(ctk.CTk):
             self.quit_app()
 
 if __name__ == "__main__":
-    app = GameTimerApp()
+    instance = single_instance.SingleInstance()
+    if not instance.is_primary:
+        # 이미 실행 중 → 그 창을 앞으로 꺼내고 종료 (두 개가 같은 타이머를 이중으로 돌리지 않도록)
+        instance.notify_primary()
+        sys.exit(0)
+    app = GameTimerApp(instance)
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()
