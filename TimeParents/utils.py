@@ -444,13 +444,33 @@ def clear_game_block():
 # --- Autostart (강제 종료 후 재로그인 시 자동 실행 → 저장된 타이머 복원) ---
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
-def ensure_autostart():
-    """빌드된 exe로 실행 중이면 현재 사용자 시작 프로그램에 등록합니다."""
-    if not getattr(sys, "frozen", False):
-        return
+def ensure_autostart(required=False):
+    """Register the current launcher on sign-in; verify it before enabling shared mode."""
+    if not getattr(sys, "frozen", False) and not required:
+        return False
     try:
         import winreg
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-            winreg.SetValueEx(key, "TimeParents", 0, winreg.REG_SZ, f'"{sys.executable}"')
-    except Exception:
-        pass
+        command = f'"{sys.executable}"'
+        if not getattr(sys, "frozen", False):
+            folder = os.path.dirname(sys.executable)
+            pythonw = os.path.join(folder, "pythonw.exe")
+            launcher = pythonw if os.path.isfile(pythonw) else sys.executable
+            main = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+            command = f'"{launcher}" "{main}"'
+        if len(command) > 260:
+            raise OSError("실행 파일을 경로가 짧은 폴더에 두고 다시 시도하세요.")
+        access = winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, access) as key:
+            try:
+                previous = winreg.QueryValueEx(key, "TimeParents")[0]
+            except FileNotFoundError:
+                previous = None
+            if previous != command:
+                winreg.SetValueEx(key, "TimeParents", 0, winreg.REG_SZ, command)
+            if winreg.QueryValueEx(key, "TimeParents")[0] != command:
+                raise OSError("TimeParents 시작 프로그램 등록을 확인할 수 없습니다.")
+            return True
+    except (ImportError, OSError) as exc:
+        if required:
+            raise OSError("Windows 로그인 자동 실행을 등록할 수 없습니다. " + str(exc)) from exc
+        return False

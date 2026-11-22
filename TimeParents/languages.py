@@ -20,6 +20,8 @@ LANGUAGES = {
         
         # Tabs
         "tab_game": "특정 게임",
+        "shared_profiles": "가족 프로필 · Windows 계정 하나로 사용",
+        "family_manager": "개별 Windows 계정 관리 (고급)",
         "tab_countdown": "카운트다운",
         "tab_schedule": "특정 시간",
         
@@ -182,6 +184,8 @@ LANGUAGES = {
         
         # Tabs
         "tab_game": "Specific Game",
+        "shared_profiles": "Family profiles · one Windows account",
+        "family_manager": "Separate Windows accounts (advanced)",
         "tab_countdown": "Countdown",
         "tab_schedule": "Scheduled Time",
         
