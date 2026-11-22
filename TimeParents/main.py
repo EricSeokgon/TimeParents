@@ -1,10 +1,29 @@
+import sys
+
+# The picker's GUI thread must attach to its private desktop before importing Tk.
+if __name__ == "__main__" and len(sys.argv) == 5 and sys.argv[1] == "--profile-picker":
+    from shared_runtime import run_picker
+    try:
+        result = run_picker(sys.argv[2], sys.argv[3], int(sys.argv[4]))
+    except Exception:
+        # A windowed executable must return to the controller's in-app picker on failure.
+        from pathlib import Path
+        import traceback
+        import utils
+        try:
+            Path(utils.DATA_DIR, "profile-login-error.log").write_text(traceback.format_exc(), encoding="utf-8")
+        except OSError:
+            pass
+        result = 3
+    sys.exit(result)
+
 import customtkinter as ctk
 from tkinter import messagebox
 import utils
 import system_control
+import family_mode
 import timer_logic
 from timer_logic import GameTimer, ProcessTimer
-import sys
 from datetime import datetime, timedelta
 import webbrowser
 import languages
@@ -17,7 +36,7 @@ import threading
 import re
 import time
 
-VERSION = "1.9.1"
+from app_version import VERSION
 
 GRACE_SECONDS = 60
 RELOCK_INTERVAL_MS = 60 * 1000  # 잠금 동작 후 비밀번호로 중지할 때까지 재잠금 주기
@@ -60,6 +79,7 @@ class GameTimerApp(ctk.CTk):
     def __init__(self, instance=None):
         super().__init__()
         self._instance = instance
+        self.switch_to_shared = False
 
         self.current_lang = utils.load_language()
         self.title(f"{languages.get_text('app_title', self.current_lang)} v{VERSION}")
@@ -245,6 +265,8 @@ class GameTimerApp(ctk.CTk):
         self._icon_button(header, "📊", self.show_statistics).pack(side="right", padx=(0, 6))
 
         self._build_status_card()
+        ctk.CTkButton(self.container, text=languages.get_text("shared_profiles", self.current_lang),
+                      command=self._open_profile_manager).pack(fill="x", pady=(0, 6))
 
         # 모드 탭 (기본 높이 250은 너무 커서 내용에 맞게 줄임)
         self.tab_view = ctk.CTkTabview(self.container, height=168, fg_color=CARD_COLOR)
@@ -353,6 +375,11 @@ class GameTimerApp(ctk.CTk):
         header.pack(fill="x", pady=(0, 8))
         self._icon_button(header, "←", self.show_dashboard).pack(side="left")
         ctk.CTkLabel(header, text=languages.get_text("settings", self.current_lang), font=("Arial", 20, "bold")).pack(side="left", padx=6)
+
+        ctk.CTkButton(self.container, text=languages.get_text("shared_profiles", self.current_lang),
+                      command=self._open_profile_manager).pack(fill="x", pady=(0, 6))
+        ctk.CTkButton(self.container, text=languages.get_text("family_manager", self.current_lang),
+                      command=self._open_family_manager).pack(fill="x", pady=(0, 8))
 
         # 일일 사용 제한
         daily_frame = self._section(languages.get_text("daily_limit", self.current_lang))
@@ -665,6 +692,36 @@ class GameTimerApp(ctk.CTk):
 
     def show_statistics(self):
         stats_window.open_statistics(self)
+
+    def _open_family_manager(self):
+        if self._verify_password():
+            try:
+                family_mode.open_manager()
+            except OSError as exc:
+                messagebox.showerror(languages.get_text("family_manager", self.current_lang), str(exc))
+
+    def _open_profile_manager(self):
+        from profiles import ProfileStore
+        from profile_ui import ParentPanel
+        if not self._verify_password():
+            return
+        with ProfileStore() as store:
+            def activate(enabled):
+                if self._is_enforcing():
+                    raise ValueError("현재 타이머가 끝난 뒤 공유 로그인을 시작하세요.")
+                if enabled:
+                    if not store.children():
+                        raise ValueError("자녀 프로필을 먼저 저장하세요.")
+                    utils.ensure_autostart(required=True)
+                    store.set_enabled(True)
+                    self.switch_to_shared = True
+                    panel.destroy()
+            panel = ParentPanel(self, store, activate)
+            self.wait_window(panel)
+        if self.switch_to_shared:
+            if self.tray_icon:
+                self.tray_icon.stop()
+            self.quit()
 
     def _form_settings(self):
         """메인 화면에 입력한 값 (다시 그려도 유지되도록 설정 파일에 저장하는 항목)."""
@@ -1203,11 +1260,27 @@ class GameTimerApp(ctk.CTk):
             self.quit_app()
 
 if __name__ == "__main__":
+    if family_mode.is_child_shell():
+        sys.exit(0)
     instance = single_instance.SingleInstance()
     if not instance.is_primary:
         # 이미 실행 중 → 그 창을 앞으로 꺼내고 종료 (두 개가 같은 타이머를 이중으로 돌리지 않도록)
         instance.notify_primary()
         sys.exit(0)
-    app = GameTimerApp(instance)
-    app.protocol("WM_DELETE_WINDOW", app.on_closing)
-    app.mainloop()
+    import profiles
+    from shared_runtime import run_shared
+    try:
+        while True:
+            if profiles.configured():
+                utils.ensure_autostart()
+                if run_shared(instance):
+                    continue
+                break
+            app = GameTimerApp(instance)
+            app.protocol("WM_DELETE_WINDOW", app.on_closing)
+            app.mainloop()
+            if not app.switch_to_shared:
+                break
+            app.destroy()
+    finally:
+        instance.close()
