@@ -188,6 +188,35 @@ class StartupTests(unittest.TestCase):
 
 
 class ScreenTests(unittest.TestCase):
+    def test_power_off_from_login_requires_confirmation_without_granting_access(self):
+        import tkinter as tk
+        from tkinter import ttk
+        from profile_ui import LoginView
+
+        root = tk.Tk()
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        store, done = Mock(), Mock()
+        store.children.return_value = []
+        login = LoginView(root, store, "test-session", done)
+        button, = [w for w in login.body.winfo_children()
+                   if isinstance(w, ttk.Button) and w.cget("text") == "컴퓨터 종료"]
+        with patch("profile_ui.messagebox.askyesno", side_effect=[False, True, True]) as confirm, \
+             patch("profile_ui.system_control.shutdown_system", side_effect=[False, True]) as shutdown, \
+             patch("profile_ui.messagebox.showerror") as error:
+            button.invoke()
+            shutdown.assert_not_called()
+            self.assertEqual(confirm.call_args.kwargs["default"], "no")
+            button.invoke()
+            error.assert_called_once()
+            self.assertEqual(shutdown.call_args.kwargs["delay_seconds"], 0)
+            button.invoke()
+            self.assertEqual(shutdown.call_count, 2)
+            error.assert_called_once()
+        store.login.assert_not_called()
+        store.begin.assert_not_called()
+        done.assert_not_called()
+
     def test_completed_login_is_accepted_after_waiting_at_picker(self):
         app = shared_runtime.SharedApp.__new__(shared_runtime.SharedApp)
         app.last_poll = shared_runtime.time.monotonic()
