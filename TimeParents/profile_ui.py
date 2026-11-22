@@ -4,6 +4,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+import system_control
 import utils
 from app_version import VERSION
 from profiles import clock_text
@@ -56,8 +57,16 @@ class LoginView:
         ttk.Button(self.body, text="자녀 로그인", command=self.sign_child,
                    state="normal" if names else "disabled").pack(fill="x", pady=4)
         ttk.Button(self.body, text="부모 로그인", command=self.parent_page).pack(fill="x", pady=4)
-        self.root.bind("<Return>", lambda event: self.sign_child())
+        ttk.Button(self.body, text="컴퓨터 종료", command=self.power_off).pack(fill="x", pady=(14, 0))
+        self.pin.bind("<Return>", lambda event: self.sign_child())
         self.pin.focus_set()
+
+    def power_off(self):
+        if not messagebox.askyesno("컴퓨터 종료", "컴퓨터를 종료할까요?\n열려 있는 프로그램도 함께 닫힙니다.",
+                                   default=messagebox.NO, parent=self.root):
+            return
+        if not system_control.shutdown_system("TimeParents 가족 로그인에서 종료 요청", delay_seconds=0):
+            messagebox.showerror("컴퓨터 종료", "Windows가 종료 요청을 처리하지 못했습니다.", parent=self.root)
 
     def sign_child(self):
         index = self.combo.current()
